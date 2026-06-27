@@ -390,6 +390,8 @@ dotnet-claude-kit/
 ├── .claude-plugin/              # Plugin marketplace manifests
 ├── .cursor/rules/               # Cursor IDE compatibility
 ├── .codex/                      # Codex CLI compatibility
+├── opencode.json                # OpenCode config (MCP + rules)
+├── .opencode/                   # OpenCode compatibility
 └── .github/workflows/           # CI validation
 ```
 
@@ -402,6 +404,7 @@ dotnet-claude-kit works with multiple AI coding tools:
 | **Claude Code** | `.claude-plugin/plugin.json` | Full integration: skills, agents, commands, rules, hooks, MCP |
 | **Cursor** | `.cursor/rules/dotnet-rules.md` | Consolidated .NET rules for Cursor IDE |
 | **Codex CLI** | `.codex/AGENTS.md` | Agent configuration pointing to skills and agents |
+| **OpenCode** | `opencode.json` + `.opencode/AGENTS.md` | Roslyn MCP server, consolidated rules, and agent/skill catalog |
 
 ## Documentation
 
