@@ -49,7 +49,7 @@ public static class FindCallersTool
                 results.Add(new CallerInfo(
                     Method: caller.CallingSymbol.Name,
                     ContainingType: caller.CallingSymbol.ContainingType?.Name ?? "unknown",
-                    File: location.Value.File,
+                    File: workspace.ToRelativePath(location.Value.File),
                     Line: location.Value.Line));
             }
         }

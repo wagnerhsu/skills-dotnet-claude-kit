@@ -46,7 +46,7 @@ public static class FindOverridesTool
                 results.Add(new OverrideInfo(
                     Method: overrideSymbol.Name,
                     ContainingType: overrideSymbol.ContainingType?.Name ?? "unknown",
-                    File: location.Value.File,
+                    File: workspace.ToRelativePath(location.Value.File),
                     Line: location.Value.Line));
             }
         }

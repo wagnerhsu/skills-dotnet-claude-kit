@@ -11,7 +11,7 @@ public record SymbolSearchResult(List<SymbolLocation> Symbols);
 
 public record ReferenceLocation(string File, int Line, string Snippet, string Kind);
 
-public record ReferencesResult(List<ReferenceLocation> References, int Count);
+public record ReferencesResult(List<ReferenceLocation> References, int Count, int TotalFound);
 
 public record ImplementationInfo(string Type, string File, int Line);
 

@@ -26,7 +26,7 @@ public static class FindSymbolTool
             return new SymbolLocation(
                 Name: s.Name,
                 Kind: SymbolResolver.GetKindString(s),
-                File: location?.File ?? "unknown",
+                File: location is { } loc ? workspace.ToRelativePath(loc.File) : "unknown",
                 Line: location?.Line ?? 0,
                 Namespace: s.ContainingNamespace?.ToDisplayString() ?? "global");
         }).ToList();

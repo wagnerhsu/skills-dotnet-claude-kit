@@ -102,7 +102,7 @@ public static class GetDependencyGraphTool
             dependencies.Add(new DependencyNode(
                 Symbol: calledMethod.Name,
                 ContainingType: calledMethod.ContainingType?.Name ?? "unknown",
-                File: location.HasValue ? SymbolResolver.MakeRelativePath(location.Value.File) : "external",
+                File: location.HasValue ? workspace.ToRelativePath(location.Value.File) : "external",
                 Line: location?.Line ?? 0,
                 Depth: currentDepth));
 

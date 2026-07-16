@@ -54,7 +54,7 @@ public static class GetDiagnosticsTool
                     Id: diag.Id,
                     Severity: diag.Severity.ToString().ToLowerInvariant(),
                     Message: diag.GetMessage(),
-                    File: lineSpan.Path ?? "unknown",
+                    File: lineSpan.Path is { } p ? workspace.ToRelativePath(p) : "unknown",
                     Line: lineSpan.StartLinePosition.Line + 1));
             }
         }

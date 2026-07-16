@@ -97,7 +97,7 @@ public static class DetectAntiPatternsTool
                 v.Id,
                 v.Severity.ToString().ToLowerInvariant(),
                 v.Message,
-                SymbolResolver.MakeRelativePath(v.File),
+                workspace.ToRelativePath(v.File),
                 v.Line,
                 v.Snippet,
                 v.Suggestion))

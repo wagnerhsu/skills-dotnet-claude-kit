@@ -59,7 +59,7 @@ public static class GetSymbolDetailTool
             Namespace: symbol.ContainingNamespace?.ToDisplayString(),
             Parameters: parameters,
             XmlDoc: summary,
-            File: location?.File ?? "unknown",
+            File: location is { } loc ? workspace.ToRelativePath(loc.File) : "unknown",
             Line: location?.Line ?? 0);
 
         return JsonSerializer.Serialize(detail);

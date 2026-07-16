@@ -147,13 +147,4 @@ public static class SymbolResolver
         INamespaceSymbol => "namespace",
         _ => symbol.Kind.ToString().ToLowerInvariant()
     };
-
-    /// <summary>
-    /// Trims a full file path to "parent/file.cs" for token-efficient MCP responses.
-    /// </summary>
-    public static string MakeRelativePath(string filePath)
-    {
-        var parts = filePath.Replace('\\', '/').Split('/');
-        return parts.Length >= 2 ? $"{parts[^2]}/{parts[^1]}" : parts[^1];
-    }
 }

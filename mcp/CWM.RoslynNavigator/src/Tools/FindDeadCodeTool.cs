@@ -106,7 +106,7 @@ public static class FindDeadCodeTool
                     deadCode.Add(new DeadCodeInfo(
                         Name: symbol.Name,
                         Kind: SymbolResolver.GetKindString(symbol),
-                        File: SymbolResolver.MakeRelativePath(symbolFile),
+                        File: workspace.ToRelativePath(symbolFile),
                         Line: symbolLine,
                         ContainingType: symbol.ContainingType?.Name));
                 }

@@ -116,6 +116,36 @@ public sealed class WorkspaceManager : IDisposable
     public Solution? GetSolution() => _solution;
 
     /// <summary>
+    /// Directory containing the loaded solution file, used as the root for relative paths.
+    /// </summary>
+    private string? SolutionDirectory =>
+        _solutionPath is null ? null : Path.GetDirectoryName(_solutionPath);
+
+    /// <summary>
+    /// Trims an absolute file path to one relative to the solution directory, forward-slashed,
+    /// for token-efficient MCP responses. Falls back to the forward-slashed input when the path
+    /// is empty, the root is unknown, or it lies outside the solution tree.
+    /// </summary>
+    public string ToRelativePath(string filePath)
+    {
+        if (string.IsNullOrEmpty(filePath)) return filePath;
+
+        var root = SolutionDirectory;
+        if (root is null) return filePath.Replace('\\', '/');
+
+        try
+        {
+            var relative = Path.GetRelativePath(root, filePath);
+            // GetRelativePath returns the input unchanged if it can't relativize (e.g. different drive).
+            return relative.Replace('\\', '/');
+        }
+        catch (ArgumentException)
+        {
+            return filePath.Replace('\\', '/');
+        }
+    }
+
+    /// <summary>
     /// Gets or creates a Compilation for the specified project. Thread-safe and cached.
     /// </summary>
     public async Task<Compilation?> GetCompilationAsync(ProjectId projectId, CancellationToken ct = default)

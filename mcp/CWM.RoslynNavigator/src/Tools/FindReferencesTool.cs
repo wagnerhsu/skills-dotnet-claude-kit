@@ -19,7 +19,7 @@ public static class FindReferencesTool
         [Description("The symbol name to find references for")] string symbolName,
         [Description("Optional: file path to disambiguate (e.g., 'IOrderRepository.cs')")] string? file = null,
         [Description("Optional: line number to disambiguate")] int? line = null,
-        [Description("Maximum results to return")] int maxResults = 100,
+        [Description("Maximum results to return. TotalFound in the response reports the full count; re-query with a higher value if it exceeds Count.")] int maxResults = 50,
         CancellationToken ct = default)
     {
         var notReady = await workspace.EnsureReadyOrStatusAsync(ct);
@@ -27,13 +27,14 @@ public static class FindReferencesTool
 
         var solution = workspace.GetSolution();
         if (solution is null)
-            return JsonSerializer.Serialize(new ReferencesResult([], 0));
+            return JsonSerializer.Serialize(new ReferencesResult([], 0, 0));
 
         var symbol = await SymbolResolver.ResolveSymbolAsync(workspace, symbolName, file, line, ct);
         if (symbol is null)
-            return JsonSerializer.Serialize(new ReferencesResult([], 0));
+            return JsonSerializer.Serialize(new ReferencesResult([], 0, 0));
 
         var references = await SymbolFinder.FindReferencesAsync(symbol, solution, ct);
+        var totalFound = references.Sum(r => r.Locations.Count());
 
         var textCache = new Dictionary<DocumentId, Microsoft.CodeAnalysis.Text.SourceText>();
         var results = new List<RefLocation>();
@@ -60,7 +61,7 @@ public static class FindReferencesTool
                 }
 
                 results.Add(new RefLocation(
-                    File: lineSpan.Path,
+                    File: workspace.ToRelativePath(lineSpan.Path),
                     Line: lineSpan.StartLinePosition.Line + 1,
                     Snippet: snippet,
                     Kind: ClassifyReferenceKind(location)));
@@ -68,7 +69,7 @@ public static class FindReferencesTool
             if (capped) break;
         }
 
-        return JsonSerializer.Serialize(new ReferencesResult(results, results.Count));
+        return JsonSerializer.Serialize(new ReferencesResult(results, results.Count, totalFound));
     }
 
     private static string ClassifyReferenceKind(Microsoft.CodeAnalysis.FindSymbols.ReferenceLocation location)

@@ -35,4 +35,39 @@ public class FindReferencesTests(TestSolutionFixture fixture) : IClassFixture<Te
 
         Assert.Equal(0, result.Count);
     }
+
+    [Fact]
+    public async Task FindReferences_ReportsTotalFound_ConsistentWithReturnedCount()
+    {
+        var json = await FindReferencesTool.ExecuteAsync(fixture.WorkspaceManager, "IOrderRepository", ct: TestContext.Current.CancellationToken);
+        var result = JsonSerializer.Deserialize<ReferencesResult>(json)!;
+
+        Assert.True(result.TotalFound > 0, "Expected a positive total for a referenced symbol");
+        Assert.True(result.TotalFound >= result.Count, "TotalFound must never be less than the returned Count");
+    }
+
+    [Fact]
+    public async Task FindReferences_RespectsMaxResults_AndSurfacesFullTotal()
+    {
+        var json = await FindReferencesTool.ExecuteAsync(fixture.WorkspaceManager, "Order", maxResults: 1, ct: TestContext.Current.CancellationToken);
+        var result = JsonSerializer.Deserialize<ReferencesResult>(json)!;
+
+        Assert.True(result.Count <= 1, "Count must respect maxResults");
+        Assert.True(result.TotalFound >= result.Count, "TotalFound must reflect the uncapped total");
+    }
+
+    [Fact]
+    public async Task FindReferences_ReturnsSolutionRelativePaths()
+    {
+        var json = await FindReferencesTool.ExecuteAsync(fixture.WorkspaceManager, "Order", ct: TestContext.Current.CancellationToken);
+        var result = JsonSerializer.Deserialize<ReferencesResult>(json)!;
+
+        Assert.NotEmpty(result.References);
+        Assert.All(result.References, r =>
+        {
+            Assert.DoesNotContain(":", r.File);       // no Windows drive prefix (e.g. C:\)
+            Assert.False(r.File.StartsWith('/'));      // no Unix absolute root
+            Assert.DoesNotContain('\\', r.File);       // forward-slashed
+        });
+    }
 }
