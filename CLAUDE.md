@@ -61,10 +61,13 @@ description: >
   What this agent is an expert in and when Claude should delegate to it.
   Include concrete trigger scenarios — Claude routes subagent work based on this.
 model: sonnet              # optional — tier alias only (fable/opus/sonnet/haiku), never a pinned version ID
+memory: project            # optional — persistent agent memory scope
+disallowedTools: Write, Edit  # optional — tools the agent must never use (e.g. read-only reviewers)
+isolation: worktree        # optional — run the agent in an isolated git worktree
 ---
 ```
 
-Plugin agents must NOT declare `permissionMode`, `hooks`, or `mcpServers` — those fields are reserved for user/project-level agents.
+Plugin agents must NOT declare `permissionMode`, `hooks`, or `mcpServers` — those fields are reserved for user/project-level agents. The optional `memory`, `disallowedTools`, and `isolation` fields ARE allowed — use them deliberately (e.g. `disallowedTools: Write, Edit` keeps review agents read-only; `isolation: worktree` isolates cleanup agents).
 
 ### Required Sections
 
@@ -127,7 +130,7 @@ description: >
 
 ## Rule Structure
 
-Rules live at `rules/dotnet/<rule-name>.md`. Rules are always loaded into context.
+Rules live at `.claude/rules/<rule-name>.md`. Rules are always loaded into context.
 
 ### Frontmatter Schema (Required)
 

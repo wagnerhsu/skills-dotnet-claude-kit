@@ -80,7 +80,7 @@ public static class OrdersModule
 
 }
 
-// Modules/Orders/Endpoints/OrderEndpoints.cs — auto-discovered via IEndpointGroup
+// Modules/Orders/[ProjectName].Modules.Orders/Features/Orders/OrderEndpoints.cs — auto-discovered via IEndpointGroup
 public sealed class OrderEndpoints : IEndpointGroup
 {
     public void Map(IEndpointRouteBuilder app)

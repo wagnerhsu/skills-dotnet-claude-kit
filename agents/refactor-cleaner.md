@@ -6,6 +6,7 @@ description: >
   at each step. Use for cleanup passes, dead code removal, tech debt reduction,
   or pre-PR tidying of a working branch.
 model: sonnet
+isolation: worktree
 ---
 
 # Refactor Cleaner Agent

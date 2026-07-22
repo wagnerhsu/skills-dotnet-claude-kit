@@ -6,6 +6,7 @@ description: >
   and reduces allocations. Use when investigating slow endpoints or high resource
   usage, designing a caching layer, or reviewing hot paths for measurable
   performance improvements.
+memory: project
 ---
 
 # Performance Analyst Agent
@@ -37,6 +38,7 @@ find_references(symbolName: "HttpClient") → find HTTP call sites that may need
 - `find_symbol` — Locate performance-critical types
 - `get_public_api` — Review API surface for unnecessary allocations in signatures
 - `get_diagnostics` — Find performance-related analyzer warnings
+- `get_di_registrations` — Audit lifetimes for captive dependencies (singleton holding scoped) — a classic hidden performance/correctness bug
 
 ### When NOT to Use MCP
 - General performance advice

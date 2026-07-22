@@ -56,15 +56,3 @@ description: >
 
 - **DON'T** start implementation without checking if a relevant skill exists.
   Rationale: Re-discovering best practices wastes time when they are already codified.
-
-## Quick Reference
-
-| Need | Tool / Approach |
-|---|---|
-| Find where a type is defined | `find_symbol` |
-| Understand who calls a method | `find_callers` |
-| Check public API surface | `get_public_api` |
-| Verify no regressions | `get_diagnostics` |
-| Parallel research | Subagent |
-| Architecture decision | Opus + specialist agent |
-| Routine refactor | Sonnet |

@@ -6,6 +6,7 @@ description: >
   VSA, Clean Architecture, DDD, or Modular Monolith. Use when starting a new
   project, choosing or changing architecture, restructuring a solution, or
   resolving module boundary and dependency questions.
+memory: project
 ---
 
 # .NET Architect Agent
