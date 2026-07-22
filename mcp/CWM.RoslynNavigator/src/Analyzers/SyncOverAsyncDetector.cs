@@ -7,7 +7,7 @@ namespace CWM.RoslynNavigator.Analyzers;
 /// AP002: Detects synchronous blocking over async code — .Result, .Wait(), .GetAwaiter().GetResult().
 /// These cause deadlocks in ASP.NET Core and thread pool starvation.
 /// </summary>
-public sealed class SyncOverAsyncDetector : IAntiPatternDetector
+internal sealed class SyncOverAsyncDetector : IAntiPatternDetector
 {
     public bool RequiresSemanticModel => false;
 

@@ -21,7 +21,7 @@ public class TestSolutionFixture : IAsyncLifetime
         EnsureMSBuildRegistered();
 
         var logger = NullLoggerFactory.Instance.CreateLogger<WorkspaceManager>();
-        WorkspaceManager = new WorkspaceManager(logger);
+        WorkspaceManager = new WorkspaceManager(logger, TimeProvider.System);
 
         var solutionPath = FindSampleSolutionPath();
         await WorkspaceManager.LoadSolutionAsync(solutionPath);

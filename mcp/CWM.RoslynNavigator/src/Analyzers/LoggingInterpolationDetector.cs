@@ -8,7 +8,7 @@ namespace CWM.RoslynNavigator.Analyzers;
 /// Interpolated strings bypass structured logging, allocate even when the log level is disabled,
 /// and prevent log aggregation tools from grouping related messages.
 /// </summary>
-public sealed class LoggingInterpolationDetector : IAntiPatternDetector
+internal sealed class LoggingInterpolationDetector : IAntiPatternDetector
 {
     private static readonly HashSet<string> LogMethods = new(StringComparer.Ordinal)
     {

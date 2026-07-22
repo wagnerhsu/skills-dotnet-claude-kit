@@ -18,6 +18,7 @@ public static class GetDependencyGraphTool
         [Description("Optional: file path to disambiguate")] string? file = null,
         [Description("Optional: line number to disambiguate")] int? line = null,
         [Description("Maximum recursion depth (1-5)")] int depth = 3,
+        [Description("Maximum nodes to return. The response's Truncated flag reports whether the walk was cut short; re-query with a higher value or lower depth for a complete graph.")] int maxResults = 100,
         CancellationToken ct = default)
     {
         var notReady = await workspace.EnsureReadyOrStatusAsync(ct);
@@ -25,11 +26,11 @@ public static class GetDependencyGraphTool
 
         var solution = workspace.GetSolution();
         if (solution is null)
-            return JsonSerializer.Serialize(new DependencyGraphResult("unknown", [], 0));
+            return JsonSerializer.Serialize(new DependencyGraphResult("unknown", [], 0, false));
 
         var symbol = await SymbolResolver.ResolveSymbolAsync(workspace, symbolName, file, line, ct);
         if (symbol is not IMethodSymbol rootMethod)
-            return JsonSerializer.Serialize(new DependencyGraphResult(symbolName, [], 0));
+            return JsonSerializer.Serialize(new DependencyGraphResult(symbolName, [], 0, false));
 
         depth = Math.Clamp(depth, 1, 5);
 
@@ -42,13 +43,21 @@ public static class GetDependencyGraphTool
 
         var visited = new HashSet<string>();
         var dependencies = new List<DependencyNode>();
+        var state = new WalkState(Math.Max(1, maxResults));
 
-        await WalkDependenciesAsync(workspace, rootMethod, 1, depth, visited, dependencies, fileToProject, ct);
+        await WalkDependenciesAsync(workspace, rootMethod, 1, depth, visited, dependencies, fileToProject, state, ct);
 
         return JsonSerializer.Serialize(new DependencyGraphResult(
             RootSymbol: rootMethod.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat),
             Dependencies: dependencies,
-            TotalNodes: dependencies.Count));
+            TotalNodes: dependencies.Count,
+            Truncated: state.Truncated));
+    }
+
+    private sealed class WalkState(int maxNodes)
+    {
+        public int MaxNodes { get; } = maxNodes;
+        public bool Truncated { get; set; }
     }
 
     private static async Task WalkDependenciesAsync(
@@ -59,9 +68,10 @@ public static class GetDependencyGraphTool
         HashSet<string> visited,
         List<DependencyNode> dependencies,
         Dictionary<string, Project> fileToProject,
+        WalkState state,
         CancellationToken ct)
     {
-        if (currentDepth > maxDepth) return;
+        if (currentDepth > maxDepth || state.Truncated) return;
 
         ct.ThrowIfCancellationRequested();
 
@@ -90,13 +100,20 @@ public static class GetDependencyGraphTool
             var symbolInfo = semanticModel.GetSymbolInfo(invocation, ct);
             if (symbolInfo.Symbol is not IMethodSymbol calledMethod) continue;
 
-            // Skip system/framework methods
+            // Skip system/framework methods (exact segment match so user namespaces
+            // like "SystemX" or "Microsofty" are not skipped)
             var ns = calledMethod.ContainingNamespace?.ToDisplayString() ?? "";
-            if (ns.StartsWith("System") || ns.StartsWith("Microsoft")) continue;
+            if (IsFrameworkNamespace(ns)) continue;
 
             var displayString = calledMethod.ToDisplayString();
             if (visited.Contains(displayString)) continue;
             visited.Add(displayString);
+
+            if (dependencies.Count >= state.MaxNodes)
+            {
+                state.Truncated = true;
+                return;
+            }
 
             var location = SymbolResolver.GetLocation(calledMethod);
             dependencies.Add(new DependencyNode(
@@ -110,8 +127,12 @@ public static class GetDependencyGraphTool
             if (calledMethod.DeclaringSyntaxReferences.Length > 0)
             {
                 await WalkDependenciesAsync(workspace, calledMethod,
-                    currentDepth + 1, maxDepth, visited, dependencies, fileToProject, ct);
+                    currentDepth + 1, maxDepth, visited, dependencies, fileToProject, state, ct);
             }
         }
     }
+
+    private static bool IsFrameworkNamespace(string ns) =>
+        ns == "System" || ns.StartsWith("System.", StringComparison.Ordinal) ||
+        ns == "Microsoft" || ns.StartsWith("Microsoft.", StringComparison.Ordinal);
 }

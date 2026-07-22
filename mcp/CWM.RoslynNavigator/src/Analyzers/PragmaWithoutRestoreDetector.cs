@@ -7,7 +7,7 @@ namespace CWM.RoslynNavigator.Analyzers;
 /// AP008: Detects #pragma warning disable without a corresponding #pragma warning restore.
 /// Unbounded pragmas suppress warnings for the entire file, hiding potential issues.
 /// </summary>
-public sealed class PragmaWithoutRestoreDetector : IAntiPatternDetector
+internal sealed class PragmaWithoutRestoreDetector : IAntiPatternDetector
 {
     public bool RequiresSemanticModel => false;
 

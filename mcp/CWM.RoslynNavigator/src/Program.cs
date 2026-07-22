@@ -16,6 +16,7 @@ builder.Logging.AddConsole(options =>
     options.LogToStandardErrorThreshold = LogLevel.Trace);
 
 // Register workspace services
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<WorkspaceManager>();
 builder.Services.AddHostedService<WorkspaceInitializer>();
 

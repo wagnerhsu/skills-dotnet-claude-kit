@@ -7,7 +7,7 @@ namespace CWM.RoslynNavigator.Analyzers;
 /// AP003: Detects direct <c>new HttpClient()</c> instantiation.
 /// Direct instantiation causes socket exhaustion. Use IHttpClientFactory instead.
 /// </summary>
-public sealed class HttpClientInstantiationDetector : IAntiPatternDetector
+internal sealed class HttpClientInstantiationDetector : IAntiPatternDetector
 {
     public bool RequiresSemanticModel => false;
 

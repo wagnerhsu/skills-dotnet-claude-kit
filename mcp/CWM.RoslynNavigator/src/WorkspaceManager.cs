@@ -15,12 +15,11 @@ namespace CWM.RoslynNavigator;
 /// one inotify watch per subdirectory, quickly exhausting the kernel limit for large solutions.
 /// Instead, documents are refreshed on demand when tools are invoked.
 /// </summary>
-public sealed class WorkspaceManager : IDisposable
+public sealed class WorkspaceManager(ILogger<WorkspaceManager> logger, TimeProvider clock) : IDisposable
 {
     private const int LazyLoadThreshold = 50;
     private const int MaxCachedCompilations = 30;
 
-    private readonly ILogger<WorkspaceManager> _logger;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly ConcurrentDictionary<ProjectId, Compilation> _compilationCache = new();
     private readonly ConcurrentDictionary<ProjectId, long> _cacheAccessOrder = new();
@@ -31,8 +30,10 @@ public sealed class WorkspaceManager : IDisposable
     private int _rootsAttempted; // 0 = not tried, 1 = tried
     private long _lastRefreshTicks;
     private long _lastStructuralScanTicks;
+    private long _lastErrorRetryTicks;
     private static readonly long RefreshCooldownTicks = TimeSpan.FromSeconds(5).Ticks;
     private static readonly long StructuralScanCooldownTicks = TimeSpan.FromSeconds(60).Ticks;
+    private static readonly long ErrorRetryCooldownTicks = TimeSpan.FromSeconds(30).Ticks;
 
     private MSBuildWorkspace? _workspace;
     private Solution? _solution;
@@ -45,14 +46,9 @@ public sealed class WorkspaceManager : IDisposable
     public bool IsLazyLoading => ProjectCount > LazyLoadThreshold;
 
     /// <summary>
-    /// Set by Program.cs after host build to allow lazy IMcpServer resolution.
+    /// Set by Program.cs after host build to allow lazy McpServer resolution.
     /// </summary>
     internal IServiceProvider? Services { get; set; }
-
-    public WorkspaceManager(ILogger<WorkspaceManager> logger)
-    {
-        _logger = logger;
-    }
 
     /// <summary>
     /// Loads the solution at the specified path. Call this once on startup.
@@ -66,7 +62,7 @@ public sealed class WorkspaceManager : IDisposable
             _solutionPath = solutionPath;
             _errorMessage = null;
 
-            _logger.LogInformation("Loading solution: {SolutionPath}", solutionPath);
+            logger.LogInformation("Loading solution: {SolutionPath}", solutionPath);
 
             // Dispose previous workspace to avoid leaking Roslyn Solution snapshots
             _workspace?.Dispose();
@@ -75,14 +71,14 @@ public sealed class WorkspaceManager : IDisposable
             _workspace.RegisterWorkspaceFailedHandler(args =>
             {
                 if (args.Diagnostic.Kind == WorkspaceDiagnosticKind.Failure)
-                    _logger.LogError("Workspace failure: {Message}", args.Diagnostic.Message);
+                    logger.LogError("Workspace failure: {Message}", args.Diagnostic.Message);
                 else
-                    _logger.LogWarning("Workspace warning: {Message}", args.Diagnostic.Message);
+                    logger.LogWarning("Workspace warning: {Message}", args.Diagnostic.Message);
             });
 
             _solution = await _workspace.OpenSolutionAsync(solutionPath, cancellationToken: ct);
 
-            _logger.LogInformation("Solution loaded: {ProjectCount} projects", _solution.ProjectIds.Count);
+            logger.LogInformation("Solution loaded: {ProjectCount} projects", _solution.ProjectIds.Count);
 
             if (!IsLazyLoading)
             {
@@ -90,7 +86,7 @@ public sealed class WorkspaceManager : IDisposable
             }
             else
             {
-                _logger.LogInformation("Large solution detected ({Count} projects). Using lazy loading.",
+                logger.LogInformation("Large solution detected ({Count} projects). Using lazy loading.",
                     _solution.ProjectIds.Count);
             }
 
@@ -99,7 +95,7 @@ public sealed class WorkspaceManager : IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load solution: {SolutionPath}", solutionPath);
+            logger.LogError(ex, "Failed to load solution: {SolutionPath}", solutionPath);
             _errorMessage = ex.Message;
             State = WorkspaceState.Error;
             throw;
@@ -187,7 +183,7 @@ public sealed class WorkspaceManager : IDisposable
         {
             _compilationCache.TryRemove(projectId, out _);
             _cacheAccessOrder.TryRemove(projectId, out _);
-            _logger.LogDebug("Evicted compilation cache for project {ProjectId}", projectId);
+            logger.LogDebug("Evicted compilation cache for project {ProjectId}", projectId);
         }
     }
 
@@ -217,7 +213,8 @@ public sealed class WorkspaceManager : IDisposable
     {
         WorkspaceState.NotStarted => "Workspace has not been initialized. Waiting for solution path.",
         WorkspaceState.Loading => "Workspace is loading the solution. Please try again in a moment.",
-        WorkspaceState.Error => $"Workspace failed to load: {_errorMessage}",
+        WorkspaceState.Error =>
+            $"Workspace failed to load: {_errorMessage}. The server retries automatically on later calls.",
         WorkspaceState.Ready => "Workspace is ready.",
         _ => "Unknown workspace state."
     };
@@ -226,13 +223,51 @@ public sealed class WorkspaceManager : IDisposable
     /// Returns null when the workspace is ready; otherwise attempts one-shot discovery
     /// from MCP roots and returns a JSON status response if still not ready.
     /// When the workspace is ready, refreshes any documents that have changed on disk.
+    /// Refresh/reload failures never escape as exceptions — tools always get either a
+    /// ready workspace or a graceful status response, and a failed load of a known
+    /// solution path is retried automatically (with a cooldown) on later calls.
     /// </summary>
     public async Task<string?> EnsureReadyOrStatusAsync(CancellationToken ct)
     {
         if (State == WorkspaceState.Ready)
         {
-            await RefreshChangedDocumentsAsync(ct);
-            return null;
+            try
+            {
+                await RefreshChangedDocumentsAsync(ct);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // A failed refresh (e.g. a .csproj saved mid-write) must not surface as a
+                // raw MCP error. LoadSolutionAsync already recorded the Error state; fall
+                // through to the status response and let the retry path below recover.
+                logger.LogWarning(ex, "Workspace refresh failed; will retry on a later call.");
+            }
+
+            if (State == WorkspaceState.Ready) return null;
+        }
+
+        // Retry a previously failed load of a known solution path (transient failures
+        // such as mid-write project files). Cooldown prevents hammering a broken solution.
+        if (State == WorkspaceState.Error && _solutionPath is not null && TryClaimErrorRetry())
+        {
+            try
+            {
+                await LoadSolutionAsync(_solutionPath, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Workspace reload retry failed.");
+            }
+
+            if (State == WorkspaceState.Ready) return null;
         }
 
         // One-shot attempt to discover workspace from MCP roots
@@ -245,11 +280,19 @@ public sealed class WorkspaceManager : IDisposable
         return JsonSerializer.Serialize(new StatusResponse(State.ToString(), GetStatusMessage()));
     }
 
+    private bool TryClaimErrorRetry()
+    {
+        var now = clock.GetUtcNow().UtcTicks;
+        var last = Interlocked.Read(ref _lastErrorRetryTicks);
+        if (now - last < ErrorRetryCooldownTicks) return false;
+        return Interlocked.CompareExchange(ref _lastErrorRetryTicks, now, last) == last;
+    }
+
     private async Task TryInitializeFromRootsAsync(CancellationToken ct)
     {
         try
         {
-            var server = Services?.GetService(typeof(IMcpServer)) as IMcpServer;
+            var server = Services?.GetService(typeof(McpServer)) as McpServer;
             if (server is null) return;
 
             var rootsResult = await server.RequestRootsAsync(new ListRootsRequestParams(), ct);
@@ -262,17 +305,17 @@ public sealed class WorkspaceManager : IDisposable
                 var solutionPath = SolutionDiscovery.FindSolutionPath([], localPath);
                 if (solutionPath is not null)
                 {
-                    _logger.LogInformation("Discovered solution from MCP roots: {SolutionPath}", solutionPath);
+                    logger.LogInformation("Discovered solution from MCP roots: {SolutionPath}", solutionPath);
                     await LoadSolutionAsync(solutionPath, ct);
                     return;
                 }
             }
 
-            _logger.LogWarning("MCP roots available but no .sln/.slnx found in any root directory.");
+            logger.LogWarning("MCP roots available but no .sln/.slnx found in any root directory.");
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to discover workspace from MCP roots.");
+            logger.LogWarning(ex, "Failed to discover workspace from MCP roots.");
         }
     }
 
@@ -280,14 +323,14 @@ public sealed class WorkspaceManager : IDisposable
     {
         if (_solution is null) return;
 
-        _logger.LogInformation("Warming compilations for {Count} projects...", _solution.ProjectIds.Count);
+        logger.LogInformation("Warming compilations for {Count} projects...", _solution.ProjectIds.Count);
 
         await Parallel.ForEachAsync(
             _solution.ProjectIds,
             new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = ct },
             async (projectId, token) => await GetCompilationAsync(projectId, token));
 
-        _logger.LogInformation("All compilations warmed.");
+        logger.LogInformation("All compilations warmed.");
     }
 
     /// <summary>
@@ -327,7 +370,7 @@ public sealed class WorkspaceManager : IDisposable
             }
         }
 
-        _logger.LogInformation("Captured timestamps for {Count} documents across {ProjectCount} projects",
+        logger.LogInformation("Captured timestamps for {Count} documents across {ProjectCount} projects",
             _knownDocuments.Count, _projectFileTimestamps.Count);
     }
 
@@ -342,7 +385,7 @@ public sealed class WorkspaceManager : IDisposable
     {
         if (_solution is null || _solutionPath is null) return;
 
-        var now = DateTime.UtcNow.Ticks;
+        var now = clock.GetUtcNow().UtcTicks;
 
         var lastRefresh = Interlocked.Read(ref _lastRefreshTicks);
         if (now - lastRefresh < RefreshCooldownTicks) return;
@@ -351,7 +394,7 @@ public sealed class WorkspaceManager : IDisposable
         // Phase 1: check .csproj timestamps (one stat per project)
         if (HasProjectFileChanged())
         {
-            _logger.LogInformation("Project file changed. Full reload needed.");
+            logger.LogInformation("Project file changed. Full reload needed.");
             _compilationCache.Clear();
             _cacheAccessOrder.Clear();
             await LoadSolutionAsync(_solutionPath, ct);
@@ -365,7 +408,7 @@ public sealed class WorkspaceManager : IDisposable
             Interlocked.Exchange(ref _lastStructuralScanTicks, now);
             if (HasNewSourceFiles())
             {
-                _logger.LogInformation("New source files detected. Full reload needed.");
+                logger.LogInformation("New source files detected. Full reload needed.");
                 _compilationCache.Clear();
                 _cacheAccessOrder.Clear();
                 await LoadSolutionAsync(_solutionPath, ct);
@@ -399,7 +442,7 @@ public sealed class WorkspaceManager : IDisposable
                 _compilationCache.TryRemove(info.ProjectId, out _);
                 _cacheAccessOrder.TryRemove(info.ProjectId, out _);
 
-                _logger.LogDebug("Refreshed changed document: {Path}", info.FilePath);
+                logger.LogDebug("Refreshed changed document: {Path}", info.FilePath);
             }
         }
         finally

@@ -9,7 +9,7 @@ namespace CWM.RoslynNavigator.Analyzers;
 /// Without CancellationToken, callers cannot cancel long-running operations.
 /// Skips interface implementations (the interface defines the contract).
 /// </summary>
-public sealed class MissingCancellationTokenDetector : IAntiPatternDetector
+internal sealed class MissingCancellationTokenDetector : IAntiPatternDetector
 {
     public bool RequiresSemanticModel => true;
 

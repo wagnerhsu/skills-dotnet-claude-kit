@@ -7,7 +7,7 @@ namespace CWM.RoslynNavigator.Analyzers;
 /// AP004: Detects direct use of DateTime.Now, DateTime.UtcNow, and DateTimeOffset.Now.
 /// Use TimeProvider for testability and consistency.
 /// </summary>
-public sealed class DateTimeDirectUseDetector : IAntiPatternDetector
+internal sealed class DateTimeDirectUseDetector : IAntiPatternDetector
 {
     private static readonly HashSet<string> ForbiddenMembers = new(StringComparer.Ordinal)
     {

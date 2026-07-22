@@ -10,7 +10,7 @@ namespace CWM.RoslynNavigator.Tools;
 [McpServerToolType]
 public static class FindDeadCodeTool
 {
-    [McpServerTool(Name = "find_dead_code"), Description("Find unused types, methods, and properties across the solution. Identifies symbols with zero references that are not public API entry points, interface implementations, or overrides.")]
+    [McpServerTool(Name = "find_dead_code"), Description("Find unused types, methods, and properties across the solution. Identifies symbols with zero references that are not public API entry points, interface implementations, or overrides. Uses a fast identifier-match pre-filter: symbols whose exact name appears as an identifier token in another file are assumed referenced without a full reference search, so occasional false negatives are possible for heavily-reused names.")]
     public static async Task<string> ExecuteAsync(
         WorkspaceManager workspace,
         [Description("Scope: 'file', 'project', or 'solution'")] string scope = "solution",
@@ -86,11 +86,13 @@ public static class FindDeadCodeTool
         {
             ct.ThrowIfCancellationRequested();
 
-            // Fast pre-filter: if symbol name appears in other files, likely not dead
+            // Fast pre-filter: if the symbol name appears as a whole identifier in another
+            // file, it is likely referenced. Whole-token matching (not substring) so that
+            // e.g. "OrderService" in another file does not mask a dead "Order" type.
             var declaringTree = symbol.DeclaringSyntaxReferences.FirstOrDefault()?.SyntaxTree;
             var likelyReferenced = sourceTexts.Any(kvp =>
                 kvp.Key != declaringTree &&
-                kvp.Value.Contains(symbol.Name, StringComparison.Ordinal));
+                ContainsIdentifier(kvp.Value, symbol.Name));
 
             if (likelyReferenced) continue;
 
@@ -115,6 +117,30 @@ public static class FindDeadCodeTool
 
         return JsonSerializer.Serialize(new DeadCodeResult(deadCode, deadCode.Count, totalFound));
     }
+
+    /// <summary>
+    /// Checks whether <paramref name="name"/> occurs in <paramref name="text"/> as a whole
+    /// identifier token (not as a substring of a longer identifier).
+    /// </summary>
+    private static bool ContainsIdentifier(string text, string name)
+    {
+        var index = 0;
+        while ((index = text.IndexOf(name, index, StringComparison.Ordinal)) >= 0)
+        {
+            var before = index == 0 ? '\0' : text[index - 1];
+            var afterIndex = index + name.Length;
+            var after = afterIndex >= text.Length ? '\0' : text[afterIndex];
+
+            if (!IsIdentifierChar(before) && !IsIdentifierChar(after))
+                return true;
+
+            index += 1;
+        }
+
+        return false;
+    }
+
+    private static bool IsIdentifierChar(char c) => char.IsLetterOrDigit(c) || c == '_';
 
     private static bool MatchesKindFilter(ISymbol symbol, string kind) => kind.ToLowerInvariant() switch
     {

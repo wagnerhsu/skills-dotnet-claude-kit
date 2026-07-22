@@ -8,7 +8,7 @@ namespace CWM.RoslynNavigator.Analyzers;
 /// AP007: Detects empty catch blocks that silently swallow errors.
 /// Files named *Middleware* or *ExceptionHandler* are excluded (legitimate global handlers).
 /// </summary>
-public sealed class BroadCatchDetector : IAntiPatternDetector
+internal sealed class BroadCatchDetector : IAntiPatternDetector
 {
     public bool RequiresSemanticModel => false;
 

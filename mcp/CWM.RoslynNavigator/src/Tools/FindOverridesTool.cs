@@ -15,6 +15,7 @@ public static class FindOverridesTool
         WorkspaceManager workspace,
         [Description("The virtual or abstract method name to find overrides for")] string methodName,
         [Description("Optional: containing class name to disambiguate")] string? className = null,
+        [Description("Maximum results to return. TotalFound in the response reports the full count; re-query with a higher value if it exceeds Count.")] int maxResults = 50,
         CancellationToken ct = default)
     {
         var notReady = await workspace.EnsureReadyOrStatusAsync(ct);
@@ -22,7 +23,7 @@ public static class FindOverridesTool
 
         var solution = workspace.GetSolution();
         if (solution is null)
-            return JsonSerializer.Serialize(new OverridesResult([], 0));
+            return JsonSerializer.Serialize(new OverridesResult([], 0, 0));
 
         var symbol = await SymbolResolver.ResolveSymbolAsync(workspace, methodName, ct: ct);
 
@@ -33,17 +34,17 @@ public static class FindOverridesTool
         }
 
         if (symbol is null)
-            return JsonSerializer.Serialize(new OverridesResult([], 0));
+            return JsonSerializer.Serialize(new OverridesResult([], 0, 0));
 
         var overrides = await SymbolFinder.FindOverridesAsync(symbol, solution, cancellationToken: ct);
 
-        var results = new List<OverrideInfo>();
+        var all = new List<OverrideInfo>();
         foreach (var overrideSymbol in overrides)
         {
             var location = SymbolResolver.GetLocation(overrideSymbol);
             if (location.HasValue)
             {
-                results.Add(new OverrideInfo(
+                all.Add(new OverrideInfo(
                     Method: overrideSymbol.Name,
                     ContainingType: overrideSymbol.ContainingType?.Name ?? "unknown",
                     File: workspace.ToRelativePath(location.Value.File),
@@ -51,6 +52,8 @@ public static class FindOverridesTool
             }
         }
 
-        return JsonSerializer.Serialize(new OverridesResult(results, results.Count));
+        var results = all.Take(Math.Max(1, maxResults)).ToList();
+
+        return JsonSerializer.Serialize(new OverridesResult(results, results.Count, all.Count));
     }
 }

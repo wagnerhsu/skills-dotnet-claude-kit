@@ -9,7 +9,7 @@ namespace CWM.RoslynNavigator;
 /// on macOS/Linux when the `dotnet` on PATH is a wrapper script (e.g. Homebrew) and
 /// DOTNET_ROOT is not set, so hostfxr cannot resolve the SDK layout.
 /// </summary>
-public static class MSBuildRegistration
+internal static class MSBuildRegistration
 {
     /// <summary>
     /// Must be called before any Roslyn/MSBuild types are loaded.
