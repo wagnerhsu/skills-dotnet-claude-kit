@@ -7,6 +7,7 @@ description: >
   on: /checkpoint, "checkpoint", "save progress", "commit and handoff",
   "save state", "pause here", "before a risky change". For the full
   end-of-session ritual with learning extraction, use /wrap-up instead.
+disable-model-invocation: true
 ---
 
 # /checkpoint

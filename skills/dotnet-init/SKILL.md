@@ -3,6 +3,9 @@ name: dotnet-init
 description: >
   Interactive project initialization. Detects project type, asks architecture
   questions, and generates a customized CLAUDE.md — no manual template copying.
+  Use when: "init project", "setup project", "initialize", "new project setup",
+  "generate CLAUDE.md", "configure for dotnet-claude-kit", or starting Claude
+  Code on a fresh or existing .NET codebase.
 ---
 
 # /dotnet-init
@@ -43,8 +46,8 @@ Analyze the current directory to determine if this is an existing or greenfield 
     - Multi-module system → modular-monolith
   - Ask: "Project name?"
   - Scaffold the solution structure:
-    - dotnet new sln -n ProjectName
-    - dotnet new web-api/worker/classlib as appropriate
+    - dotnet new sln -n ProjectName --format slnx   (modern XML solution format)
+    - dotnet new webapi / worker / classlib as appropriate
     - Set up Directory.Build.props with .NET 10 defaults
     - Create src/ and tests/ folder structure
 ```
@@ -138,9 +141,9 @@ Claude: No .sln or .csproj found. Let's set up a new project.
   Recommendation: Vertical Slice Architecture
 
   Creating solution...
-  → dotnet new sln -n OrderService
-  → dotnet new web -n OrderService.Api -o src/OrderService.Api
-  → dotnet new xunit -n OrderService.Tests -o tests/OrderService.Tests
+  → dotnet new sln -n OrderService --format slnx
+  → dotnet new webapi -n OrderService.Api -o src/OrderService.Api
+  → dotnet new xunit3 -n OrderService.Tests -o tests/OrderService.Tests
   → Directory.Build.props with .NET 10 defaults
   → Generated: ./CLAUDE.md (OrderService + VSA + scaffold-ready)
 

@@ -24,7 +24,7 @@ description: >
 1. **Parallel over sequential** — Run 3-5 Claude sessions simultaneously using git worktrees. Build a feature in one, fix a bug in another, run tests in a third. The single biggest productivity unlock.
 2. **Plan then execute** — For any non-trivial task, start in plan mode, iterate until the plan is bulletproof, then switch to auto-accept. A good plan means Claude 1-shots the implementation.
 3. **Verification closes the loop** — Give Claude a way to prove its work: `dotnet build`, `dotnet test`, `get_diagnostics` via MCP. This single practice 2-3x the quality of the output.
-4. **Context is a budget, not a dumping ground** — A 200k window fills fast: a typical .cs file is 500-2000 tokens, and 50 file reads can burn half the budget. Spend tokens like sprint capacity — deliberately.
+4. **Context is a budget, not a dumping ground** — The context window fills fast: a typical .cs file is 500-2000 tokens, and 50 file reads can burn a large share of the budget. Spend tokens like sprint capacity — deliberately.
 5. **Automate the repetitive** — If you do it more than once a day, make it a hook, a slash command, or a subagent. Pre-allow safe permissions. Eliminate friction.
 6. **Compound your knowledge** — Every correction becomes a rule in `MEMORY.md` (see `instinct-system` skill). Every PR review adds a learning. Over time, Claude's mistake rate drops because your project's knowledge base grows.
 
@@ -168,36 +168,23 @@ I want to verify the migration before applying it."
 
 ### Subagent Patterns for .NET
 
-Create reusable subagents in `.claude/agents/`:
-
-```markdown
-<!-- .claude/agents/verify-api.md -->
-You are a .NET API verification agent. Your job:
-1. Run `dotnet build` and fix any compilation errors
-2. Run `dotnet test` and fix any test failures
-3. Use `get_diagnostics` to check for warnings
-4. Verify all endpoints return proper TypedResults
-5. Check that no domain entities leak into API responses
-Report: PASS with summary, or FAIL with specific issues.
-```
-
-```markdown
-<!-- .claude/agents/code-simplifier.md -->
-You are a code simplification agent for .NET projects.
-Review the recent changes and simplify:
-- Replace verbose LINQ with simpler alternatives
-- Use primary constructors where applicable
-- Replace manual null checks with pattern matching
-- Consolidate duplicated code
-- Remove unnecessary using statements
-Do not change behavior. Only simplify.
-```
+The kit ships 10 specialist agents — route to them before writing your own:
+`dotnet-architect`, `code-reviewer`, `refactor-cleaner`, `test-engineer`,
+`security-auditor`, `build-error-resolver`, `ef-core-specialist`,
+`api-designer`, `performance-analyst`, `devops-engineer`. Each carries
+pre-loaded skills and domain context a generalist session lacks.
 
 **Use them:**
 ```
-"Run the verify-api agent on my changes before I create the PR."
-"Run code-simplifier on the files I just modified."
+"Run the code-reviewer agent on my changes before I create the PR."
+"Have refactor-cleaner simplify the files I just modified."
+"Send the failing CI log to build-error-resolver."
 ```
+
+For workflows the kit does not cover, create project-specific subagents in
+`.claude/agents/` — a markdown file with a role, a numbered job list, and a
+required report format (PASS with summary / FAIL with specifics). Keep one
+concern per agent so its output stays reviewable.
 
 **When to offload vs. stay in main context:** see Context Discipline below — subagents are also your context isolation chambers, not just task runners.
 
@@ -307,7 +294,7 @@ You: "Would a staff .NET engineer approve this?
 ### Don't Load Everything Because the Window Is Large
 
 ```
-// BAD — "200k tokens is huge, let's load everything"
+// BAD — "the context window is huge, let's load everything"
 Read all 30 files in the Orders module, all 15 test files,
 docker-compose.yml, every migration
 *80k tokens consumed before writing a single line of code*
@@ -331,7 +318,7 @@ Subagent: summarize anything else
 | Claude made a mistake | "Update CLAUDE.md so you don't make that mistake again" |
 | Code feels hacky | "Knowing everything you know now, implement the elegant solution" |
 | Want to verify architecture | Spin up a second session as staff reviewer |
-| Repetitive PR workflow | Create a subagent (verify-api, code-simplifier) |
+| Repetitive PR workflow | Route to kit agents (code-reviewer, refactor-cleaner) or create a project subagent |
 | Learning a new codebase | Use "Explanatory" output style via `/config` |
 | Need a type's API or location | `get_public_api` / `find_symbol` — don't read the file |
 | Need to modify a file | Read it fully — exact content required |

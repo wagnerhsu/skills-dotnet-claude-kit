@@ -58,10 +58,11 @@ public async Task CreateOrder_WithValidItems_Returns201WithOrderId()
     // Act
     var response = await client.PostAsJsonAsync("/api/orders", request);
 
-    // Assert
-    response.StatusCode.Should().Be(HttpStatusCode.Created);
+    // Assert — plain xUnit Assert (FluentAssertions v8+ requires a commercial license)
+    Assert.Equal(HttpStatusCode.Created, response.StatusCode);
     var result = await response.Content.ReadFromJsonAsync<CreateOrderResponse>();
-    result!.OrderId.Should().NotBeEmpty();
+    Assert.NotNull(result);
+    Assert.NotEqual(Guid.Empty, result.OrderId);
 }
 ```
 
