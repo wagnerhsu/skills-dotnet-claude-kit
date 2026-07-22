@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using CWM.RoslynNavigator.Responses;
 using ModelContextProtocol.Server;
@@ -67,18 +68,48 @@ public static class GetProjectGraphTool
         }
 
         // Strategy 2: Check preprocessor symbols (e.g., NET10_0, NET8_0)
-        var preprocessorSymbol = project.ParseOptions?.PreprocessorSymbolNames
-            .Where(s => s.StartsWith("NET"))
-            .OrderByDescending(s => s.Length)
-            .FirstOrDefault();
-
-        if (preprocessorSymbol is not null)
+        if (project.ParseOptions?.PreprocessorSymbolNames is { } symbols)
         {
-            // Convert "NET10_0" to "net10.0", "NET8_0_OR_GREATER" stays as-is but we prefer exact match
-            var exact = preprocessorSymbol.Replace("_OR_GREATER", "");
-            return exact.ToLowerInvariant().Replace('_', '.');
+            var detected = DetectFromPreprocessorSymbols(symbols);
+            if (detected is not null)
+                return detected;
         }
 
         return "unknown";
+    }
+
+    // Exact TFM symbols: NET10_0, NETSTANDARD2_0, NETCOREAPP3_1. Anchored so compat
+    // symbols like NETCOREAPP1_0_OR_GREATER (issue #19) never match.
+    private static readonly Regex ExactTfmSymbol =
+        new(@"^(NETSTANDARD|NETCOREAPP|NET)(\d+)_(\d+)$", RegexOptions.Compiled);
+
+    // .NET Framework symbols have no underscore: NET48, NET472
+    private static readonly Regex FrameworkTfmSymbol = new(@"^NET(\d{2,3})$", RegexOptions.Compiled);
+
+    internal static string? DetectFromPreprocessorSymbols(IEnumerable<string> symbols)
+    {
+        var symbolList = symbols.ToList();
+
+        // A compilation defines exactly one exact TFM symbol alongside many *_OR_GREATER
+        // compat symbols. Only the exact one names the real target framework.
+        var exact = symbolList
+            .Select(s => ExactTfmSymbol.Match(s))
+            .Where(m => m.Success)
+            .Select(m => (Prefix: m.Groups[1].Value, Major: int.Parse(m.Groups[2].Value), Minor: int.Parse(m.Groups[3].Value)))
+            .OrderByDescending(t => t.Major)
+            .ThenByDescending(t => t.Minor)
+            .Select(t => (string?)$"{t.Prefix.ToLowerInvariant()}{t.Major}.{t.Minor}")
+            .FirstOrDefault();
+
+        if (exact is not null)
+            return exact;
+
+        return symbolList
+            .Select(s => FrameworkTfmSymbol.Match(s))
+            .Where(m => m.Success)
+            .Select(m => m.Groups[1].Value)
+            .OrderByDescending(v => int.Parse(v.PadRight(3, '0')))
+            .Select(v => (string?)$"net{v}")
+            .FirstOrDefault();
     }
 }
