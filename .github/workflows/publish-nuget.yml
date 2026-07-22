@@ -36,7 +36,7 @@ jobs:
         run: dotnet test ${{ env.TEST_PATH }} -c Release --logger trx --results-directory TestResults
 
       - name: Upload test results
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: test-results
@@ -60,7 +60,7 @@ jobs:
         run: dotnet pack ${{ env.PROJECT_PATH }} -c Release -o ./nupkg /p:Version=${{ inputs.version }} /p:ContinuousIntegrationBuild=true
 
       - name: Upload package
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: nuget-package
           path: ./nupkg/*
@@ -76,7 +76,7 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Download package
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: nuget-package
           path: ./nupkg
@@ -103,7 +103,7 @@ jobs:
         run: dotnet nuget push ./nupkg/CWM.RoslynNavigator.${{ inputs.version }}.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ inputs.version }}
           name: CWM.RoslynNavigator v${{ inputs.version }}
