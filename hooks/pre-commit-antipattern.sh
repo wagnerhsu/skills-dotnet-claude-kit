@@ -43,7 +43,7 @@ for FILE in "${STAGED_FILES[@]}"; do
     fi
 
     # Check for async void (except event handlers)
-    if grep -n 'async void' "$FILE" | grep -v 'EventArgs' 2>/dev/null; then
+    if grep -n 'async void' "$FILE" 2>/dev/null | grep -v 'EventArgs'; then
         echo "🔴 $FILE: async void is dangerous — use async Task instead"
         ERRORS=$((ERRORS + 1))
     fi

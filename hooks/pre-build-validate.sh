@@ -14,7 +14,7 @@ WARNINGS=0
 echo "Validating project structure..."
 
 # Check for solution file
-SLN_COUNT=$(find "$SOLUTION_DIR" -maxdepth 1 -name "*.sln" -o -name "*.slnx" 2>/dev/null | wc -l)
+SLN_COUNT=$(find "$SOLUTION_DIR" -maxdepth 1 \( -name "*.sln" -o -name "*.slnx" \) 2>/dev/null | wc -l)
 if [[ "$SLN_COUNT" -eq 0 ]]; then
     echo "⚠️  No .sln or .slnx file found in $SOLUTION_DIR"
     WARNINGS=$((WARNINGS + 1))
