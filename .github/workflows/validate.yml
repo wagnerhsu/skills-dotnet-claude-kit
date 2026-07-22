@@ -455,7 +455,7 @@ jobs:
         run: dotnet test mcp/CWM.RoslynNavigator/tests/CWM.RoslynNavigator.Tests.csproj --no-restore -c Release --logger trx --results-directory TestResults
 
       - name: Publish test results
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: test-results
