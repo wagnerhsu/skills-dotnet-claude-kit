@@ -138,19 +138,20 @@ Claude: Running dotnet build...
   Iteration 1/5:
   - 6 errors: Missing namespace (CS0246) — adding using directives
   - 3 errors: Type mismatch (CS1503) — updating method signatures
-  - 3 errors: Missing member (CS0117) — package API changed in v9.0
+  - 3 errors: Interface not implemented (CS0738) — package API changed
 
   Rebuilding... 3 errors remaining.
 
   Iteration 2/5:
-  - 3 errors: CS0117 in MassTransit 9.0
-    - ConsumeContext.Publish renamed to Send for mandatory routing
-    - Fixing 3 call sites
+  - 3 errors: CS0738 after xunit.v3 upgrade
+    - IAsyncLifetime.InitializeAsync now returns ValueTask (was Task in v2),
+      and DisposeAsync comes from IAsyncDisposable
+    - Updating 3 test fixtures to the ValueTask signatures
 
   Rebuilding... 0 errors. Build is green.
 
   Running dotnet test... All 47 tests passed.
-  Added to Memory > Packages: "MassTransit 9.0 renamed Publish to Send"
+  Added to Memory > Packages: "xunit.v3 IAsyncLifetime uses ValueTask signatures"
 ```
 
 ## Related

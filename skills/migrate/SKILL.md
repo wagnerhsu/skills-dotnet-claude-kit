@@ -141,7 +141,9 @@ Never modify a migration that is already applied — create a new one.
 3. **Update incrementally** — one package, then `dotnet build && dotnet test`
    before the next. Batched updates make failures unattributable.
 4. **Check fit** — consult `knowledge/package-recommendations.md` before adding
-   new packages; prefer built-in .NET alternatives.
+   new packages; prefer built-in .NET alternatives. Moving off MediatR
+   (commercial license from v13)? Follow the step-by-step guide in
+   `knowledge/mediatr-to-mediator-migration.md`.
 5. **Rollback** — git revert the package bump; never downgrade other packages
    to compensate.
 

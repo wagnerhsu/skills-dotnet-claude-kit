@@ -20,11 +20,12 @@ A comprehensive guide covering setup, workflows, optimization, and troubleshooti
 dotnet tool install -g CWM.RoslynNavigator
 ```
 
-2. **Add dotnet-claude-kit as a Claude Code plugin:**
-```bash
-# From your .NET project directory
-claude plugins add /path/to/dotnet-claude-kit
+2. **Add dotnet-claude-kit as a Claude Code plugin** (inside a Claude Code session):
 ```
+/plugin marketplace add codewithmukesh/dotnet-claude-kit
+/plugin install dotnet-claude-kit
+```
+For local development/testing, load directly from disk instead: `claude --plugin-dir /path/to/dotnet-claude-kit`
 
 3. **Configure MCP servers:**
 Copy or merge `mcp-configs/mcp-servers.json` into your project's `.mcp.json`:
@@ -206,7 +207,7 @@ When starting a new session, the system:
 1. Loads `CLAUDE.md` and any `MEMORY.md` for project context
 2. Checks for handoff notes in `.claude/handoff.md` from the previous session
 3. Loads instincts from `.claude/instincts.json`
-4. Makes rules from `rules/dotnet/` available (always-apply)
+4. Makes rules from `.claude/rules/` available (always-apply)
 
 ### Mid-Session Checkpointing
 

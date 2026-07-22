@@ -7,7 +7,7 @@ namespace CWM.RoslynNavigator;
 /// Shared utility for resolving symbol names to ISymbol instances across all projects in the solution.
 /// Supports disambiguation by file path and line number.
 /// </summary>
-public static class SymbolResolver
+internal static class SymbolResolver
 {
     /// <summary>
     /// Finds all symbols matching the given name across the entire solution.

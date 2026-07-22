@@ -64,7 +64,7 @@ public static class FindReferencesTool
                     File: workspace.ToRelativePath(lineSpan.Path),
                     Line: lineSpan.StartLinePosition.Line + 1,
                     Snippet: snippet,
-                    Kind: ClassifyReferenceKind(location)));
+                    Kind: ClassifyReferenceKind(location, ct)));
             }
             if (capped) break;
         }
@@ -72,13 +72,15 @@ public static class FindReferencesTool
         return JsonSerializer.Serialize(new ReferencesResult(results, results.Count, totalFound));
     }
 
-    private static string ClassifyReferenceKind(Microsoft.CodeAnalysis.FindSymbols.ReferenceLocation location)
+    private static string ClassifyReferenceKind(
+        Microsoft.CodeAnalysis.FindSymbols.ReferenceLocation location,
+        CancellationToken ct)
     {
         var syntaxTree = location.Location.SourceTree;
         if (syntaxTree is null)
             return "usage";
 
-        var root = syntaxTree.GetRoot();
+        var root = syntaxTree.GetRoot(ct);
         var node = root.FindNode(location.Location.SourceSpan, findInsideTrivia: false, getInnermostNodeForTie: true);
         if (node is null)
             return "usage";

@@ -10,6 +10,7 @@ Workflow skills at `skills/<name>/SKILL.md` — each registers its `/name` autom
 
 | Command | Description | Related Skill / Agent |
 |---------|-------------|----------------------|
+| `/dotnet-init` | Project setup (existing or greenfield) — detects or scaffolds, then generates CLAUDE.md | project-setup / dotnet-architect |
 | `/spec` | Relentless questioning until human + AI agree on a persisted spec | -- / -- |
 | `/plan` | Enter plan mode with architecture awareness (consumes specs) | architecture-advisor / dotnet-architect |
 | `/scaffold` | Architecture-aware feature scaffolding (templates inline) | -- / dotnet-architect |
@@ -23,14 +24,16 @@ Workflow skills at `skills/<name>/SKILL.md` — each registers its `/name` autom
 | `/de-sloppify` | Systematic code cleanup pass | -- / refactor-cleaner |
 | `/checkpoint` | Mid-session save: commit + brief handoff note | -- / -- |
 | `/wrap-up` | Session handoff lifecycle (end-of-session + session start) | instinct-system / -- |
+| `/outdated` | Dependency health: outdated packages, CVEs, license traps | -- / -- |
+| `/arch-check` | Architecture conformance: dependency direction, layer violations | architecture-advisor / dotnet-architect |
 
 Instinct operations (status, export, import) are modes of the `instinct-system` skill — say "show instincts", "export instincts", or "import instincts".
 
 ---
 
-## Skills (45 total)
+## Skills (47 total)
 
-14 are the workflow skills listed under Slash Commands above; the remaining 31 are knowledge skills:
+16 are the workflow skills listed under Slash Commands above; the remaining 31 are knowledge skills:
 
 ### .NET Domain (28)
 
@@ -108,7 +111,7 @@ Only the first three are Claude Code hooks (auto-run via `hooks/hooks.json`); th
 
 ---
 
-## MCP Tools (15)
+## MCP Tools (20)
 
 | Tool | Category | Purpose |
 |------|----------|---------|
@@ -127,6 +130,11 @@ Only the first three are Claude Code hooks (auto-run via `hooks/hooks.json`); th
 | `get_test_coverage_map` | Quality | Heuristic test coverage by naming |
 | `detect_antipatterns` | Quality | .NET anti-patterns via Roslyn |
 | `detect_circular_dependencies` | Quality | Cycles in project or type deps |
+| `get_symbol_source` | Navigation | Bounded source of one member |
+| `get_file_outline` | Navigation | File skeleton without bodies |
+| `get_nuget_packages` | Dependencies | Package inventory, CPM-aware |
+| `get_endpoint_map` | API | Routes + auth posture per endpoint |
+| `get_di_registrations` | Quality | DI lifetimes, duplicates, captive deps |
 
 ---
 
@@ -134,6 +142,7 @@ Only the first three are Claude Code hooks (auto-run via `hooks/hooks.json`); th
 
 | Command | Primary Skill(s) | Primary Agent | Support Agent(s) |
 |---------|-----------------|---------------|-------------------|
+| `/dotnet-init` | project-setup | dotnet-architect | -- |
 | `/spec` | -- | -- | -- |
 | `/plan` | architecture-advisor | dotnet-architect | -- |
 | `/scaffold` | project-setup | dotnet-architect | api-designer, ef-core-specialist |
@@ -147,3 +156,5 @@ Only the first three are Claude Code hooks (auto-run via `hooks/hooks.json`); th
 | `/de-sloppify` | -- | refactor-cleaner | code-reviewer |
 | `/checkpoint` | -- | -- | -- |
 | `/wrap-up` | instinct-system | -- | -- |
+| `/outdated` | -- | -- | -- |
+| `/arch-check` | architecture-advisor | dotnet-architect | -- |

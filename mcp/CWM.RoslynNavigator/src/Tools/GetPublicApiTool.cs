@@ -13,6 +13,7 @@ public static class GetPublicApiTool
     public static async Task<string> ExecuteAsync(
         WorkspaceManager workspace,
         [Description("The type name to get the public API for")] string typeName,
+        [Description("Maximum members to return. TotalFound in the response reports the full count; re-query with a higher value if it exceeds Count.")] int maxResults = 50,
         CancellationToken ct = default)
     {
         var notReady = await workspace.EnsureReadyOrStatusAsync(ct);
@@ -20,9 +21,9 @@ public static class GetPublicApiTool
 
         var symbol = await SymbolResolver.ResolveSymbolAsync(workspace, typeName, ct: ct);
         if (symbol is not INamedTypeSymbol typeSymbol)
-            return JsonSerializer.Serialize(new PublicApiResult("not found", []));
+            return JsonSerializer.Serialize(new PublicApiResult("not found", [], 0, 0));
 
-        var members = typeSymbol.GetMembers()
+        var allMembers = typeSymbol.GetMembers()
             .Where(m => m.DeclaredAccessibility == Accessibility.Public)
             .Where(m => !m.IsImplicitlyDeclared) // Exclude compiler-generated members
             .Where(m => m is not IMethodSymbol { MethodKind: MethodKind.PropertyGet or MethodKind.PropertySet })
@@ -32,9 +33,10 @@ public static class GetPublicApiTool
                 Accessibility: m.DeclaredAccessibility.ToString().ToLowerInvariant()))
             .ToList();
 
+        var members = allMembers.Take(Math.Max(1, maxResults)).ToList();
         var typeKind = SymbolResolver.GetKindString(typeSymbol);
 
-        return JsonSerializer.Serialize(new PublicApiResult(typeKind, members));
+        return JsonSerializer.Serialize(new PublicApiResult(typeKind, members, members.Count, allMembers.Count));
     }
 
     private static string GetMemberKind(ISymbol symbol) => symbol switch

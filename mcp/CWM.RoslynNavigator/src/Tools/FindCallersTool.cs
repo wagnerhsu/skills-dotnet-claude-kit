@@ -15,6 +15,7 @@ public static class FindCallersTool
         WorkspaceManager workspace,
         [Description("The method name to find callers for")] string methodName,
         [Description("Optional: containing class name to disambiguate")] string? className = null,
+        [Description("Maximum results to return. TotalFound in the response reports the full count; re-query with a higher value if it exceeds Count.")] int maxResults = 50,
         CancellationToken ct = default)
     {
         var notReady = await workspace.EnsureReadyOrStatusAsync(ct);
@@ -22,7 +23,7 @@ public static class FindCallersTool
 
         var solution = workspace.GetSolution();
         if (solution is null)
-            return JsonSerializer.Serialize(new CallersResult([], 0));
+            return JsonSerializer.Serialize(new CallersResult([], 0, 0));
 
         var symbol = await SymbolResolver.ResolveSymbolAsync(workspace, methodName, ct: ct);
 
@@ -34,11 +35,11 @@ public static class FindCallersTool
         }
 
         if (symbol is null)
-            return JsonSerializer.Serialize(new CallersResult([], 0));
+            return JsonSerializer.Serialize(new CallersResult([], 0, 0));
 
         var callers = await SymbolFinder.FindCallersAsync(symbol, solution, ct);
 
-        var results = new List<CallerInfo>();
+        var all = new List<CallerInfo>();
         foreach (var caller in callers)
         {
             if (!caller.IsDirect) continue;
@@ -46,7 +47,7 @@ public static class FindCallersTool
             var location = SymbolResolver.GetLocation(caller.CallingSymbol);
             if (location.HasValue)
             {
-                results.Add(new CallerInfo(
+                all.Add(new CallerInfo(
                     Method: caller.CallingSymbol.Name,
                     ContainingType: caller.CallingSymbol.ContainingType?.Name ?? "unknown",
                     File: workspace.ToRelativePath(location.Value.File),
@@ -54,6 +55,8 @@ public static class FindCallersTool
             }
         }
 
-        return JsonSerializer.Serialize(new CallersResult(results, results.Count));
+        var results = all.Take(Math.Max(1, maxResults)).ToList();
+
+        return JsonSerializer.Serialize(new CallersResult(results, results.Count, all.Count));
     }
 }

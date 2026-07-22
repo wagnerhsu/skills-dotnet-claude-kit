@@ -5,6 +5,8 @@ description: >
   performance, security, and project conventions, powered by Roslyn MCP analysis.
   Use for PR reviews, pre-merge quality gates, reviewing recent changes, or any
   "review this code" request.
+memory: project
+disallowedTools: Write, Edit
 ---
 
 # Code Reviewer Agent

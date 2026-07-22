@@ -7,6 +7,7 @@ description: >
   "done for today", "that's all", "end session", "signing off", "handoff" —
   and at session start: "start session", "session start", "load handoff",
   "pick up where we left off", "what were we working on".
+disable-model-invocation: true
 ---
 
 # /wrap-up
@@ -126,5 +127,4 @@ Written to .claude/handoff.md. See you next session.
 ## Related
 
 - `/checkpoint` — Mid-session save (commit + brief note) without ending the session
-- `instinct-system` — Confidence-scored pattern capture fed by the Learned section
-- `instinct-system` — Turns user corrections into permanent MEMORY.md rules
+- `instinct-system` — Routes session learnings: patterns become instincts, user corrections become permanent MEMORY.md rules

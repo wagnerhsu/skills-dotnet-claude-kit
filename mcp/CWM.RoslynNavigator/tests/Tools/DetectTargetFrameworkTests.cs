@@ -87,4 +87,67 @@ public class DetectTargetFrameworkTests
 
         Assert.Null(GetProjectGraphTool.DetectFromPreprocessorSymbols(symbols));
     }
+
+    // Multi-targeting: Roslyn loads one project flavor per TFM. The first entry of
+    // <TargetFrameworks> must NOT be reported for every flavor — the net8.0 flavor of a
+    // "net10.0;net8.0" project is net8.0.
+
+    [Fact]
+    public void SelectMultiTargetTfm_FlavorNameWins_ForNet8FlavorOfNet10Net8Project()
+    {
+        var tfm = GetProjectGraphTool.SelectMultiTargetTfm(
+            "MyProject(net8.0)",
+            ["net10.0", "net8.0"],
+            preprocessorSymbols: null);
+
+        Assert.Equal("net8.0", tfm);
+    }
+
+    [Fact]
+    public void SelectMultiTargetTfm_PreprocessorSymbolsWin_WhenNameHasNoFlavorSuffix()
+    {
+        string[] net8Symbols = ["TRACE", "NET", "NET8_0", "NETCOREAPP", "NET8_0_OR_GREATER"];
+
+        var tfm = GetProjectGraphTool.SelectMultiTargetTfm(
+            "MyProject",
+            ["net10.0", "net8.0"],
+            net8Symbols);
+
+        Assert.Equal("net8.0", tfm);
+    }
+
+    [Fact]
+    public void SelectMultiTargetTfm_MatchesOsSpecificEntry_ByBaseTfmPrefix()
+    {
+        string[] net10Symbols = ["TRACE", "NET", "NET10_0", "NETCOREAPP", "WINDOWS"];
+
+        var tfm = GetProjectGraphTool.SelectMultiTargetTfm(
+            "MyProject",
+            ["net10.0-windows", "net8.0"],
+            net10Symbols);
+
+        Assert.Equal("net10.0-windows", tfm);
+    }
+
+    [Fact]
+    public void SelectMultiTargetTfm_FallsBackToFirstEntry_WithoutNameOrSymbols()
+    {
+        var tfm = GetProjectGraphTool.SelectMultiTargetTfm(
+            "MyProject",
+            ["net10.0", "net8.0"],
+            preprocessorSymbols: null);
+
+        Assert.Equal("net10.0", tfm);
+    }
+
+    [Theory]
+    [InlineData("MyProject(net8.0)", "net8.0")]
+    [InlineData("My.Project(net10.0-windows)", "net10.0-windows")]
+    [InlineData("MyProject", null)]
+    [InlineData("Weird(Name)Project", null)] // parens not at the end
+    [InlineData("MyProject()", null)]
+    public void ExtractTfmFromProjectName_ParsesFlavorSuffix(string projectName, string? expected)
+    {
+        Assert.Equal(expected, GetProjectGraphTool.ExtractTfmFromProjectName(projectName));
+    }
 }

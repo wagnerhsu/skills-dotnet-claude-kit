@@ -8,7 +8,7 @@ namespace CWM.RoslynNavigator.Analyzers;
 /// AP001: Detects async void methods (except event handlers with (object, EventArgs) signature).
 /// async void swallows exceptions and prevents callers from awaiting completion.
 /// </summary>
-public sealed class AsyncVoidDetector : IAntiPatternDetector
+internal sealed class AsyncVoidDetector : IAntiPatternDetector
 {
     public bool RequiresSemanticModel => false;
 

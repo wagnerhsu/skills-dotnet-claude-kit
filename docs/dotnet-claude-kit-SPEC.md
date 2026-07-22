@@ -1,5 +1,7 @@
 # dotnet-claude-kit — Complete Repository Specification
 
+> **Historical** — v0.x launch spec, kept for context. Counts and schemas reflect the original plan (21 skills, 8 agents, 7 MCP tools); see README.md and CLAUDE.md for current state.
+
 > The definitive Claude Code companion for .NET developers.
 > Project-ready templates, intelligent agents, workflow automation, and a Roslyn MCP server for token-efficient codebase navigation.
 

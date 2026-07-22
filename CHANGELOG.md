@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] — 2026-07-22
+
+Full-kit deep audit release: every skill, agent, rule, template, knowledge doc, hook, and the MCP server audited against current Claude Code docs and the mid-2026 .NET ecosystem, then fixed, modernized, and extended.
+
+### Added
+- **5 new MCP tools (15 → 20)** in CWM.RoslynNavigator 0.8.0, all read-only and capped:
+  - `get_symbol_source` — bounded source of ONE member (doc comment + attributes included; types return signatures-only unless `includeBodies`; hard char cap with `Truncated` flag). Kills the "read the whole file for one method" token leak
+  - `get_file_outline` — type/member skeleton of a file with line numbers, no bodies
+  - `get_nuget_packages` — per-project PackageReference inventory, Central Package Management aware, no network calls
+  - `get_endpoint_map` — Minimal API + controller route inventory with composed MapGroup prefixes and auth posture per endpoint (`authorized`/`anonymous`/`unmarked`)
+  - `get_di_registrations` — DI map with lifetimes, duplicate registrations, and captive-dependency risks (singleton → scoped)
+- **`/outdated`** — dependency health workflow: package inventory via `get_nuget_packages`, staleness + CVEs via the dotnet CLI, and a commercial-license trap screen (MediatR 13+, MassTransit 9+, FluentAssertions 8+, AutoMapper 15+)
+- **`/arch-check`** — architecture conformance workflow: verifies dependency direction, layer violations, module boundary leaks, and cycles against the declared architecture (VSA, Clean, DDD, Modular Monolith) using project-graph analysis
+- **Agent memory** — `memory: project` on code-reviewer, dotnet-architect, security-auditor, performance-analyst, and test-engineer so specialists learn project conventions across sessions
+- **Read-only code reviewer** — `disallowedTools: Write, Edit` on code-reviewer; reviews can no longer modify code
+- **Worktree-isolated cleanup** — `isolation: worktree` on refactor-cleaner
+- **`.NET 11 Preview Watch`** section in `knowledge/dotnet-whats-new.md` (preview 6, GA Nov 10 2026, C# 15 union types/closed hierarchies/collection-expression arguments) with an explicit "don't generate net11.0/C# 15 code unless asked" guard, plus a 10 → 11 placeholder in `knowledge/breaking-changes.md`
+- **CI hardening** — windows-latest hook-behavior job (Git Bash, real JSON payloads), shellcheck, docs-count consistency check (31 claims verified against the filesystem), cross-tool parity check, plugin/marketplace/CHANGELOG version-consistency check, cross-reference checks upgraded from warn to fail, YAML-parser-based frontmatter validation
+
+### Fixed
+- **`modern-csharp` taught pre-ship C# 14 extension-member syntax** — rewritten to the shipped `extension(Order order)` block form (this skill is the always-loaded baseline, so the error propagated everywhere)
+- **Windows hooks were broken** — `post-edit-format.sh` silently no-opped on backslash paths and infinite-looped at drive roots; `pre-bash-guard.sh` over-blocked when jq was absent (the default on Windows) and wrote block reasons to stdout where Claude never saw them. All fixed and covered by the new Windows CI job
+- **MCP server** — upgraded ModelContextProtocol 0.2.0-preview.1 → 1.4.1 stable; multi-target TFM misreport fixed (net10.0;net8.0 flavors now report correctly); workspace no longer bricks permanently after a transient reload failure (graceful status + 30s retry); `find_implementations` returned absolute paths; `find_dead_code` name-containment pre-filter upgraded to whole-identifier matching; uniform `maxResults` + `TotalFound` caps across all list-returning tools; `get_diagnostics` capped at 100 errors-first with per-severity totals; Central Package Management introduced; internal code now follows the kit's own rules (primary constructors, sealed, TimeProvider)
+- **Skill correctness** — docker HEALTHCHECK no longer relaunches the app; opentelemetry setup no longer triggers the NotSupportedException its own anti-pattern warns about; testing fixtures use real xUnit v3 signatures (ValueTask); security-scan OWASP categories corrected and remapped to OWASP Top 10:2025; project-setup gutted to a tech-stack advisor (was a triple routing collision with dotnet-init/health-check); ddd/resilience/authentication/build-fix/dotnet-init sample-code errors fixed
+- **Stale paths** — phantom `rules/dotnet/` references corrected to `.claude/rules/` in CLAUDE.md, CONTRIBUTING.md, `.codex/`, `.cursor/`, and docs; `/dotnet-init` restored to shorthand-guide tables
+
+### Changed
+- **FluentAssertions removed kit-wide** — `.Should()` examples in rules and skills replaced with xUnit built-in `Assert` (FA v8+ is commercial); new Assertions stance + Object Mapping (Mapperly over commercial AutoMapper) sections in `knowledge/package-recommendations.md`
+- **Knowledge docs verified against NuGet/Microsoft Learn on 2026-07-22** — Wolverine 3.x → 6.x (with migration note), Aspire rewritten (correct `Aspire.Hosting.AppHost` package, v13, polyglot rebrand, aspire CLI), MediatR 14 + Lucky Penny licensing, MassTransit v9 released (v8 EOL end 2026), xunit.v3 3.x, Scrutor 7.x, Refit 13.x, WireMock.Net 2.x, StackExchange.Redis 3.x
+- **Rules trimmed to exactly 600 lines** (was 669) by removing tables that duplicated their own DO/DON'T content
+- **Three oversized pipeline skills converted to workflow format** (de-sloppify 277→116, health-check 320→112, security-scan 381→121) with deep content moved to `references/`
+- **`disable-model-invocation: true`** on `/checkpoint` and `/wrap-up` (session-control commands are explicit-invocation only)
+- `.mcp.json` declares explicit `type: "stdio"`; docs/SPEC.md and skill-benchmark-report.md stamped as historical snapshots
+- Plugin version bumped to 0.11.0 (47 skills, 16 slash commands, 20 MCP tools)
+
 ## [0.10.0] — 2026-06-12
 
 ### Added

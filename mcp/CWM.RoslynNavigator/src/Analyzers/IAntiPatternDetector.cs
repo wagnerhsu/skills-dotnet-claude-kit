@@ -5,7 +5,7 @@ namespace CWM.RoslynNavigator.Analyzers;
 /// <summary>
 /// Severity levels for anti-pattern violations.
 /// </summary>
-public enum AntiPatternSeverity
+internal enum AntiPatternSeverity
 {
     Warning,
     Error
@@ -14,7 +14,7 @@ public enum AntiPatternSeverity
 /// <summary>
 /// A single anti-pattern violation found in source code.
 /// </summary>
-public record AntiPatternViolation(
+internal sealed record AntiPatternViolation(
     string Id,
     AntiPatternSeverity Severity,
     string Message,
@@ -28,7 +28,7 @@ public record AntiPatternViolation(
 /// Syntax detectors operate on <see cref="SyntaxTree"/> only (fast, no compilation needed).
 /// Semantic detectors require a <see cref="SemanticModel"/> for type resolution.
 /// </summary>
-public interface IAntiPatternDetector
+internal interface IAntiPatternDetector
 {
     /// <summary>
     /// Whether this detector requires a <see cref="SemanticModel"/> (semantic) or only a <see cref="SyntaxTree"/> (syntax).

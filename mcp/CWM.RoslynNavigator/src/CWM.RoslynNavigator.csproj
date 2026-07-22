@@ -15,12 +15,12 @@
 
     <!-- NuGet package metadata -->
     <PackageId>CWM.RoslynNavigator</PackageId>
-    <Version>0.7.3</Version>
+    <Version>0.8.0</Version>
     <Authors>Mukesh Murugan</Authors>
     <Company>codewithmukesh</Company>
     <Product>CWM.RoslynNavigator</Product>
     <Title>CWM Roslyn Navigator — MCP Server for .NET</Title>
-    <Description>A Model Context Protocol (MCP) server that gives AI coding assistants semantic understanding of .NET codebases via Roslyn. 15 read-only tools for symbol navigation, reference finding, type hierarchy, dependency graphs, anti-pattern detection, dead code analysis, and diagnostics — all returning token-optimized responses. Part of the dotnet-claude-kit ecosystem.</Description>
+    <Description>A Model Context Protocol (MCP) server that gives AI coding assistants semantic understanding of .NET codebases via Roslyn. 20 read-only tools for symbol navigation, reference finding, type hierarchy, dependency graphs, anti-pattern detection, dead code analysis, diagnostics, file outlines, symbol source extraction, NuGet package inventory, endpoint maps, and DI registration analysis — all returning token-optimized responses. Part of the dotnet-claude-kit ecosystem.</Description>
     <PackageTags>mcp;roslyn;dotnet;claude;ai;code-analysis;semantic-analysis;codebase-navigation;model-context-protocol;claude-code</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/codewithmukesh/dotnet-claude-kit</PackageProjectUrl>
@@ -45,12 +45,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="ModelContextProtocol" Version="0.2.0-preview.1" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
-    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="5.0.0" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" />
-    <PackageReference Include="Microsoft.Build.Locator" Version="1.7.8" />
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+    <PackageReference Include="ModelContextProtocol" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
+    <PackageReference Include="Microsoft.Build.Locator" />
+    <PackageReference Include="Microsoft.Build.Framework" ExcludeAssets="runtime" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" />
   </ItemGroup>
 
 </Project>

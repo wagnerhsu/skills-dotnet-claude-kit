@@ -35,12 +35,3 @@ description: >
 
 - **DO** wait for post-scaffold-restore to complete after `.csproj` changes before building.
   Rationale: NuGet restore must finish before the build can resolve dependencies. Building too early produces false errors.
-
-## Quick Reference
-
-| Hook | Correct Response |
-|---|---|
-| Post-edit format | Accept the changes |
-| Pre-commit failure | Fix the issue, commit again |
-| Post-test-analyze (manual pipe) | Read and act on insights |
-| Post-scaffold-restore | Wait for completion before building |

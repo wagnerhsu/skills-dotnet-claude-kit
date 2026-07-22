@@ -55,7 +55,7 @@ Skills live in `skills/<skill-name>/SKILL.md` and follow the Agent Skills open s
 api-versioning, architecture-advisor, aspire, authentication, caching, ci-cd, clean-architecture, configuration, container-publish, ddd, dependency-injection, docker, ef-core, error-handling, httpclient-factory, logging, messaging, minimal-api, modern-csharp, openapi, opentelemetry, project-setup, project-structure, resilience, scalar, serilog, testing, vertical-slice
 
 ### Workflow Skills (each carries its methodology inline)
-build-fix, checkpoint, code-review, de-sloppify, dotnet-init, health-check, migrate, plan, scaffold, security-scan, spec, tdd, verify, wrap-up
+arch-check, build-fix, checkpoint, code-review, de-sloppify, dotnet-init, health-check, migrate, outdated, plan, scaffold, security-scan, spec, tdd, verify, wrap-up
 
 ### Workflow & Learning Skills
 convention-learner, workflow-mastery, instinct-system
@@ -75,3 +75,4 @@ Always-applied coding conventions are consolidated for OpenCode in `.cursor/rule
 - `git-workflow.md` — Conventional commits, atomic commits, branch safety
 - `agents.md` — MCP-first tools, subagent routing, skill loading
 - `hooks.md` — Format hooks, pre-commit, post-test analysis
+- `packages.md` — Latest stable NuGet versions, central package management

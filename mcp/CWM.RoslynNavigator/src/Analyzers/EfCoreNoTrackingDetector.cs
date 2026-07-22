@@ -9,7 +9,7 @@ namespace CWM.RoslynNavigator.Analyzers;
 /// Skips chains containing .Select() (projections don't need tracking),
 /// .Add/.Update/.Remove (mutation operations), or .AsNoTracking() already present.
 /// </summary>
-public sealed class EfCoreNoTrackingDetector : IAntiPatternDetector
+internal sealed class EfCoreNoTrackingDetector : IAntiPatternDetector
 {
     private static readonly HashSet<string> MutationMethods = new(StringComparer.Ordinal)
     {

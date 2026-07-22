@@ -39,8 +39,8 @@ PASSED=$(sum_metric Passed)
 FAILED=$(sum_metric Failed)
 SKIPPED=$(sum_metric Skipped)
 
-# Extract failure details
-FAILURES=$(echo "$TEST_OUTPUT" | grep -A 5 'Failed ' 2>/dev/null || true)
+# Extract failure details (printf, not echo — output may start with '-')
+FAILURES=$(printf '%s\n' "$TEST_OUTPUT" | grep -A 5 'Failed ' 2>/dev/null || true)
 
 echo ""
 echo "═══════════════════════════════════"

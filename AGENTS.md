@@ -88,6 +88,15 @@ Agents should **prefer Roslyn MCP tools over file scanning** to reduce token con
 | Check for circular dependencies | `detect_circular_dependencies` | Manually tracing project references |
 | Understand method call chains | `get_dependency_graph` | Reading multiple files and tracing calls |
 | Check which types have tests | `get_test_coverage_map` | Manually searching for test files |
+| Scan for .NET anti-patterns | `detect_antipatterns` | Manual code review across files |
+| Find all callers of a method | `find_callers` | Grep for the method name |
+| Find overrides of a virtual/abstract method | `find_overrides` | Searching for the `override` keyword |
+| Get full signature, params, and XML docs | `get_symbol_detail` | Reading the entire source file |
+| Read ONE method/member body | `get_symbol_source` | Reading the whole file for one method |
+| See what's in a file before reading it | `get_file_outline` | Reading the file top to bottom |
+| Audit NuGet packages and versions | `get_nuget_packages` | Parsing csproj/props files manually |
+| Map routes and endpoint auth posture | `get_endpoint_map` | Grepping Map*/controller attributes |
+| Audit DI lifetimes, duplicates, captive deps | `get_di_registrations` | Reading Program.cs and extension methods |
 
 ## Cross-Agent Meta Skills
 
@@ -136,6 +145,8 @@ Each workflow skill registers its own slash command and carries its methodology 
 | `/health-check` | — | code-reviewer | Graded project health report |
 | `/de-sloppify` | — | refactor-cleaner | Systematic code cleanup |
 | `/wrap-up` | instinct-system | — | Session handoff lifecycle (end + start) |
+| `/outdated` | — | — | Dependency health: staleness, CVEs, license traps |
+| `/arch-check` | architecture-advisor | dotnet-architect | Architecture conformance verification |
 
 Instinct operations (status, export, import) are modes of the `instinct-system` skill — say "show instincts", "export instincts", or "import instincts".
 

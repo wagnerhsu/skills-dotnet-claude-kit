@@ -13,6 +13,7 @@ public static class FindSymbolTool
         WorkspaceManager workspace,
         [Description("The symbol name to search for (e.g., 'OrderRepository', 'CreateAsync')")] string name,
         [Description("Filter by kind: 'type', 'class', 'interface', 'struct', 'enum', 'record', 'method', 'property', 'field', or 'any'")] string kind = "any",
+        [Description("Maximum results to return. TotalFound in the response reports the full count; re-query with a higher value if it exceeds Count.")] int maxResults = 50,
         CancellationToken ct = default)
     {
         var notReady = await workspace.EnsureReadyOrStatusAsync(ct);
@@ -20,17 +21,19 @@ public static class FindSymbolTool
 
         var symbols = await SymbolResolver.FindSymbolsByNameAsync(workspace, name, kind, ct);
 
-        var results = symbols.Select(s =>
-        {
-            var location = SymbolResolver.GetLocation(s);
-            return new SymbolLocation(
-                Name: s.Name,
-                Kind: SymbolResolver.GetKindString(s),
-                File: location is { } loc ? workspace.ToRelativePath(loc.File) : "unknown",
-                Line: location?.Line ?? 0,
-                Namespace: s.ContainingNamespace?.ToDisplayString() ?? "global");
-        }).ToList();
+        var results = symbols
+            .Take(Math.Max(1, maxResults))
+            .Select(s =>
+            {
+                var location = SymbolResolver.GetLocation(s);
+                return new SymbolLocation(
+                    Name: s.Name,
+                    Kind: SymbolResolver.GetKindString(s),
+                    File: location is { } loc ? workspace.ToRelativePath(loc.File) : "unknown",
+                    Line: location?.Line ?? 0,
+                    Namespace: s.ContainingNamespace?.ToDisplayString() ?? "global");
+            }).ToList();
 
-        return JsonSerializer.Serialize(new SymbolSearchResult(results));
+        return JsonSerializer.Serialize(new SymbolSearchResult(results, results.Count, symbols.Count));
     }
 }
