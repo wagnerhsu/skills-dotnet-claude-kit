@@ -79,14 +79,57 @@ internal sealed record AntiPatternInfo(
     string File,
     int Line,
     string Snippet,
-    string Suggestion);
+    string Suggestion,
+    string Confidence = "high",
+    string? Member = null,
+    string SourceKind = "production");
 
-internal sealed record AntiPatternsResult(List<AntiPatternInfo> Violations, int Count, int TotalFound);
+/// <summary>Per-detector counts, complete even when the violation list is truncated.</summary>
+internal sealed record AntiPatternIdSummary(
+    string Id,
+    int High,
+    int Medium,
+    int Suppressed,
+    int Total);
+
+/// <summary>
+/// The composition of a scan. Lets a caller judge signal without sampling the violation list:
+/// grade on <see cref="High"/>, review <see cref="Medium"/>, ignore <see cref="Suppressed"/>.
+/// </summary>
+internal sealed record AntiPatternSummary(
+    int High,
+    int Medium,
+    int Suppressed,
+    List<AntiPatternIdSummary> ById,
+    int ScannedFiles,
+    int ProductionFiles,
+    int TestFiles,
+    int GeneratedFiles,
+    int MigrationFiles,
+    string? SuppressionConfig,
+    string GradeOn = "high-confidence findings only");
+
+internal sealed record AntiPatternsResult(
+    List<AntiPatternInfo> Violations,
+    int Count,
+    int TotalFound,
+    AntiPatternSummary? Summary = null);
 
 // Dead code detection
-internal sealed record DeadCodeInfo(string Name, string Kind, string File, int Line, string? ContainingType);
+internal sealed record DeadCodeInfo(
+    string Name,
+    string Kind,
+    string File,
+    int Line,
+    string? ContainingType,
+    string Confidence = "high",
+    string? Note = null);
 
-internal sealed record DeadCodeResult(List<DeadCodeInfo> Symbols, int Count, int TotalFound);
+internal sealed record DeadCodeResult(
+    List<DeadCodeInfo> Symbols,
+    int Count,
+    int TotalFound,
+    int ConventionFiltered = 0);
 
 // Circular dependency detection
 internal sealed record CircularDependencyChain(List<string> Chain, string Level);
@@ -105,7 +148,15 @@ internal sealed record DependencyGraphResult(
 // Test coverage map
 internal sealed record TestCoverageEntry(string Type, string File, bool HasTests, string? TestFile);
 
-internal sealed record TestCoverageMapResult(List<TestCoverageEntry> Coverage, int TotalTypes, int TestedTypes, int Percentage);
+internal sealed record TestCoverageMapResult(
+    List<TestCoverageEntry> Coverage,
+    int TotalTypes,
+    int TestedTypes,
+    int Percentage,
+    bool Applicable = true,
+    string? NotApplicableReason = null,
+    int TestMethodCount = 0,
+    int TestClassCount = 0);
 
 // Symbol source
 internal sealed record SymbolSourceResult(

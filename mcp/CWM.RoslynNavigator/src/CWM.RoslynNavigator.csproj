@@ -15,7 +15,7 @@
 
     <!-- NuGet package metadata -->
     <PackageId>CWM.RoslynNavigator</PackageId>
-    <Version>0.8.0</Version>
+    <Version>0.9.0</Version>
     <Authors>Mukesh Murugan</Authors>
     <Company>codewithmukesh</Company>
     <Product>CWM.RoslynNavigator</Product>
