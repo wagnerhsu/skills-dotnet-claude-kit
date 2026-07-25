@@ -10,6 +10,13 @@
 </p>
 
 <p align="center">
+  <a href="https://codewithmukesh.com/blog/dotnet-claude-kit-guide/">
+    <img src="https://img.shields.io/badge/%F0%9F%93%96%20Read%20the%20Complete%20Guide-codewithmukesh.com-512BD4?style=for-the-badge&logoColor=white" alt="Read the complete dotnet-claude-kit guide" />
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://codewithmukesh.com/blog/dotnet-claude-kit-guide/"><strong>📖 Full Guide</strong></a> &bull;
   <a href="#installation">Installation</a> &bull;
   <a href="#quick-start">Quick Start</a> &bull;
   <a href="#what-makes-this-10x">10x Features</a> &bull;
@@ -23,6 +30,14 @@
 </p>
 
 ---
+
+> ### 📖 New here? Start with the guide
+>
+> **[How I Use dotnet-claude-kit: Making Claude Code Write Senior-Level .NET →](https://codewithmukesh.com/blog/dotnet-claude-kit-guide/)**
+>
+> The complete walkthrough: install and update the plugin, what happens in your first session, the everyday feature workflow, how the Roslyn MCP server cuts token usage, which commands keep a codebase healthy, plus FAQ and troubleshooting.
+>
+> *This README is the reference. The guide is how to actually use it.*
 
 ## The Problem
 
@@ -77,6 +92,8 @@ An **action layer** on top of the knowledge layer — Claude doesn't just know t
 **The result**: Less time reviewing and correcting Claude's output. More time shipping features.
 
 ## Installation
+
+> Prefer a narrated walkthrough with screenshots and troubleshooting? Read **[the complete installation and usage guide](https://codewithmukesh.com/blog/dotnet-claude-kit-guide/)**.
 
 ### Plugin Install (Recommended)
 
@@ -424,6 +441,7 @@ dotnet-claude-kit works with multiple AI coding tools:
 
 | Guide | For | Content |
 |-------|-----|---------|
+| **[📖 How I Use dotnet-claude-kit](https://codewithmukesh.com/blog/dotnet-claude-kit-guide/)** | **Start here** | **Install, update, first session, everyday feature workflow, Roslyn MCP token savings, health commands, FAQ, troubleshooting** |
 | [Shorthand Guide](docs/shorthand-guide.md) | Quick reference | All commands, skills, agents, hooks, MCP tools with cross-reference matrix |
 | [Longform Guide](docs/longform-guide.md) | Deep dive | Workflows, token optimization, autonomous patterns, troubleshooting |
 
@@ -436,6 +454,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how to add skills, agents, commands, 
 [MIT](LICENSE)
 
 ---
+
+<p align="center">
+  <strong>📖 Read the complete guide: <a href="https://codewithmukesh.com/blog/dotnet-claude-kit-guide/">How I Use dotnet-claude-kit</a></strong>
+</p>
 
 <p align="center">
   Built by <a href="https://codewithmukesh.com">Mukesh Murugan</a> &bull; Powered by Claude Code
