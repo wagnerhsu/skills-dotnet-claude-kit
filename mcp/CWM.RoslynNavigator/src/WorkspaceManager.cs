@@ -114,7 +114,7 @@ public sealed class WorkspaceManager(ILogger<WorkspaceManager> logger, TimeProvi
     /// <summary>
     /// Directory containing the loaded solution file, used as the root for relative paths.
     /// </summary>
-    private string? SolutionDirectory =>
+    public string? SolutionDirectory =>
         _solutionPath is null ? null : Path.GetDirectoryName(_solutionPath);
 
     /// <summary>

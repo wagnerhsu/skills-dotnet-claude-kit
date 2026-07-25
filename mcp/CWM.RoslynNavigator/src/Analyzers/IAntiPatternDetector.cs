@@ -12,6 +12,18 @@ internal enum AntiPatternSeverity
 }
 
 /// <summary>
+/// How certain a detector is that a finding is a genuine defect.
+/// <see cref="High"/> means the pattern is wrong regardless of context and can be graded
+/// directly. <see cref="Medium"/> means the pattern is suspicious but has legitimate uses
+/// the detector cannot rule out — these need human judgement and never feed a grade.
+/// </summary>
+internal enum AntiPatternConfidence
+{
+    Medium,
+    High
+}
+
+/// <summary>
 /// A single anti-pattern violation found in source code.
 /// </summary>
 internal sealed record AntiPatternViolation(
@@ -21,7 +33,9 @@ internal sealed record AntiPatternViolation(
     string File,
     int Line,
     string Snippet,
-    string Suggestion);
+    string Suggestion,
+    AntiPatternConfidence Confidence = AntiPatternConfidence.High,
+    string? Member = null);
 
 /// <summary>
 /// Detects specific .NET anti-patterns using Roslyn analysis.
@@ -36,10 +50,14 @@ internal interface IAntiPatternDetector
     bool RequiresSemanticModel { get; }
 
     /// <summary>
+    /// The source kinds this detector produces meaningful findings for. Trees of any other
+    /// kind are skipped entirely — for example, a missing CancellationToken on an xUnit
+    /// <c>[Fact]</c> method is not a defect, so that detector applies to production only.
+    /// </summary>
+    SourceKind AppliesTo { get; }
+
+    /// <summary>
     /// Analyze a syntax tree for anti-pattern violations.
     /// </summary>
-    /// <param name="tree">The syntax tree to analyze.</param>
-    /// <param name="model">The semantic model, or null for syntax-only detectors.</param>
-    /// <param name="ct">Cancellation token.</param>
-    IEnumerable<AntiPatternViolation> Detect(SyntaxTree tree, SemanticModel? model, CancellationToken ct);
+    IEnumerable<AntiPatternViolation> Detect(DetectionContext context);
 }

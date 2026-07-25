@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
+using CWM.RoslynNavigator.Analyzers;
 using CWM.RoslynNavigator.Responses;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
@@ -10,7 +11,58 @@ namespace CWM.RoslynNavigator.Tools;
 [McpServerToolType]
 public static class FindDeadCodeTool
 {
-    [McpServerTool(Name = "find_dead_code"), Description("Find unused types, methods, and properties across the solution. Identifies symbols with zero references that are not public API entry points, interface implementations, or overrides. Uses a fast identifier-match pre-filter: symbols whose exact name appears as an identifier token in another file are assumed referenced without a full reference search, so occasional false negatives are possible for heavily-reused names.")]
+    /// <summary>
+    /// Interfaces whose implementers are discovered by assembly scanning or DI registration
+    /// rather than by a direct reference. A zero-reference result for these means nothing.
+    /// </summary>
+    private static readonly HashSet<string> ConventionDiscoveredInterfaces = new(StringComparer.Ordinal)
+    {
+        "IEntityTypeConfiguration",
+        "IHostedService",
+        "IEndpointGroup",
+        "IExceptionHandler",
+        "IValidator",
+        "IRequestHandler",
+        "INotificationHandler",
+        "ICommandHandler",
+        "IQueryHandler",
+        "IConsumer",
+        "IStartupFilter",
+        "IConfigureOptions",
+        "IAuthorizationHandler",
+        "IClaimsTransformation",
+        "IHealthCheck",
+        "IInterceptor",
+        "IAsyncActionFilter",
+        "IActionFilter"
+    };
+
+    /// <summary>
+    /// Base types that mark a symbol as framework-instantiated.
+    /// </summary>
+    private static readonly HashSet<string> ConventionDiscoveredBaseTypes = new(StringComparer.Ordinal)
+    {
+        "Migration",
+        "ModelSnapshot",
+        "BackgroundService",
+        "DbContext",
+        "Profile",
+        "Attribute"
+    };
+
+    /// <summary>
+    /// Name suffixes that a scanner or source generator commonly binds by convention. These
+    /// are still reported, but at Medium confidence with a note, because a reference search
+    /// cannot see reflection.
+    /// </summary>
+    private static readonly string[] ConventionSuffixes =
+    [
+        "Configuration", "Handler", "Endpoint", "Endpoints", "Validator",
+        "Profile", "Seeder", "Migration", "Extensions", "Setup", "Startup",
+        "Module", "Installer", "Registrar", "Factory", "Converter"
+    ];
+
+    [McpServerTool(Name = "find_dead_code"), Description("Find unused types, methods, and properties across the solution. Identifies symbols with zero references that are not public API entry points, interface implementations, or overrides. Symbols discovered by convention (EF entity configurations, hosted services, migrations, extension-method hosts) are filtered out because a reference search cannot see assembly scanning or DI registration; the count removed is reported as conventionFiltered. Remaining hits whose names match a convention suffix are returned at medium confidence with a note. Uses a fast identifier-match pre-filter: symbols whose exact name appears as an identifier token in another file are assumed referenced without a full reference search, so occasional false negatives are possible for heavily-reused names.")]
     public static async Task<string> ExecuteAsync(
         WorkspaceManager workspace,
         [Description("Scope: 'file', 'project', or 'solution'")] string scope = "solution",
@@ -27,6 +79,7 @@ public static class FindDeadCodeTool
             return JsonSerializer.Serialize(new DeadCodeResult([], 0, 0));
 
         var candidates = new List<(ISymbol Symbol, string File, int Line)>();
+        var conventionFiltered = 0;
 
         var projects = GetProjectsForScope(solution, scope, path);
 
@@ -37,6 +90,8 @@ public static class FindDeadCodeTool
             var compilation = await workspace.GetCompilationAsync(project.Id, ct);
             if (compilation is null) continue;
 
+            var isTestProject = SourceClassifier.IsTestProject(project, compilation);
+
             var trees = scope == "file" && path is not null
                 ? compilation.SyntaxTrees.Where(t => t.FilePath?.Contains(path, StringComparison.OrdinalIgnoreCase) == true)
                 : compilation.SyntaxTrees;
@@ -44,6 +99,12 @@ public static class FindDeadCodeTool
             foreach (var tree in trees)
             {
                 ct.ThrowIfCancellationRequested();
+
+                // Generated and migration source is authored by tooling — "unused" is meaningless.
+                var sourceKind = SourceClassifier.Classify(
+                    tree, workspace.ToRelativePath(tree.FilePath ?? ""), isTestProject, ct);
+                if (sourceKind is SourceKind.Generated or SourceKind.Migration)
+                    continue;
 
                 var semanticModel = compilation.GetSemanticModel(tree);
                 var root = await tree.GetRootAsync(ct);
@@ -55,6 +116,12 @@ public static class FindDeadCodeTool
 
                     if (!MatchesKindFilter(symbol, kind)) continue;
                     if (ShouldSkip(symbol)) continue;
+
+                    if (IsConventionDiscovered(symbol))
+                    {
+                        conventionFiltered++;
+                        continue;
+                    }
 
                     var location = SymbolResolver.GetLocation(symbol);
                     if (location.HasValue)
@@ -105,17 +172,66 @@ public static class FindDeadCodeTool
                 totalFound++;
                 if (deadCode.Count < maxResults)
                 {
+                    var conventionSuffix = MatchingConventionSuffix(symbol.Name);
+
                     deadCode.Add(new DeadCodeInfo(
                         Name: symbol.Name,
                         Kind: SymbolResolver.GetKindString(symbol),
                         File: workspace.ToRelativePath(symbolFile),
                         Line: symbolLine,
-                        ContainingType: symbol.ContainingType?.Name));
+                        ContainingType: symbol.ContainingType?.Name,
+                        Confidence: conventionSuffix is null ? "high" : "medium",
+                        Note: conventionSuffix is null
+                            ? null
+                            : $"Name ends in '{conventionSuffix}' — verify it is not bound by reflection, DI scanning, or a source generator before removing"));
                 }
             }
         }
 
-        return JsonSerializer.Serialize(new DeadCodeResult(deadCode, deadCode.Count, totalFound));
+        return JsonSerializer.Serialize(
+            new DeadCodeResult(deadCode, deadCode.Count, totalFound, conventionFiltered));
+    }
+
+    /// <summary>
+    /// Whether a symbol is instantiated by a framework rather than by a call site — EF entity
+    /// configurations applied via ApplyConfigurationsFromAssembly, hosted services, migrations,
+    /// and static classes that exist only to host extension methods. A reference search cannot
+    /// see any of these, so a zero-reference result carries no information.
+    /// </summary>
+    private static bool IsConventionDiscovered(ISymbol symbol)
+    {
+        if (symbol is not INamedTypeSymbol type)
+            return false;
+
+        foreach (var iface in type.AllInterfaces)
+        {
+            if (ConventionDiscoveredInterfaces.Contains(iface.Name))
+                return true;
+        }
+
+        for (var baseType = type.BaseType; baseType is not null; baseType = baseType.BaseType)
+        {
+            if (ConventionDiscoveredBaseTypes.Contains(baseType.Name))
+                return true;
+        }
+
+        // A static class holding extension methods is referenced through the extended type,
+        // never by its own name.
+        if (type.IsStatic && type.GetMembers().OfType<IMethodSymbol>().Any(m => m.IsExtensionMethod))
+            return true;
+
+        return false;
+    }
+
+    private static string? MatchingConventionSuffix(string name)
+    {
+        foreach (var suffix in ConventionSuffixes)
+        {
+            if (name.EndsWith(suffix, StringComparison.Ordinal))
+                return suffix;
+        }
+
+        return null;
     }
 
     /// <summary>

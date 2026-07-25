@@ -3,6 +3,24 @@
 Loaded by `/health-check` Step 2. This is the **canonical** grading system for
 the kit — no other skill defines its own.
 
+## The Cardinal Rule: Never Grade a Raw Count
+
+A detector count is evidence, not a grade. Every tool in this kit returns a
+`confidence` field and a `summary` histogram for exactly this reason.
+
+- **Grade on `high` confidence findings only.** These are wrong regardless of context.
+- **`medium` findings are review items, never grade inputs.** The pattern is
+  suspicious but has legitimate uses the detector cannot rule out — a catch block
+  that logs and rethrows, an EF query in a command handler that may edit downstream.
+- **`suppressed` findings count for nothing**, but the report must state the count
+  and the config path. Suppression must be visible, or it becomes a way to game
+  the grade silently.
+- Read `summary.byId` — it is complete even when the violation list is truncated.
+  Never sample a truncated list and extrapolate.
+
+If a raw signal contradicts an invariant documented in the target repo's
+CLAUDE.md, **the invariant wins pending verification**. Verify, then grade.
+
 ## Dimension Rubrics
 
 ### Dimension 1: Build Health
@@ -19,15 +37,26 @@ Tool: `dotnet build --no-restore` — metric: error count, warning count.
 
 ### Dimension 2: Code Quality
 
-Tool: MCP `detect_antipatterns(projectFilter: each project)` — metric: anti-patterns per 1K lines.
+Tool: MCP `detect_antipatterns` — metric: **high-confidence** findings per 1K
+production lines. The tool defaults to production scope; generated code is never
+reported and test/migration code is excluded.
 
 | Grade | Criteria |
 |-------|----------|
-| A | 0 anti-patterns |
-| B | < 0.5 per 1K lines |
-| C | 0.5 - 1.5 per 1K lines |
-| D | 1.5 - 3.0 per 1K lines |
-| F | > 3.0 per 1K lines |
+| A | 0 high-confidence findings |
+| B | < 0.1 per 1K lines |
+| C | 0.1 - 0.5 per 1K lines |
+| D | 0.5 - 1.5 per 1K lines |
+| F | > 1.5 per 1K lines |
+
+**Unreviewed-medium cap:** a project cannot be graded A while more than 25
+medium-confidence findings remain untriaged. Cap at B and name the categories in
+the report. A clean high-confidence count with hundreds of unexamined mediums is
+not an A — it is an unexamined codebase.
+
+These thresholds are far tighter than raw-count grading because the detectors are
+precise now. A well-maintained 100K-line codebase should produce single-digit
+high-confidence findings; dozens means something real is wrong.
 
 Common findings: async void, sync-over-async, `new HttpClient()`, `DateTime.Now`,
 broad catch blocks, string interpolation in logging, missing CancellationToken.
@@ -50,6 +79,12 @@ at both `scope: "projects"` and `scope: "types"`.
 Tool: MCP `get_test_coverage_map(projectFilter: each production project)` —
 metric: % of production types with corresponding test classes.
 
+**Check `applicable` first.** When the tool returns `applicable: false`, the
+structural metric is invalid for this codebase and the percentage is meaningless.
+Record the dimension as **Not assessed**, quote `notApplicableReason` and
+`testMethodCount`, and **exclude it from the GPA** (divide by the number of
+dimensions actually graded). A structurally invalid metric must never become an F.
+
 | Grade | Criteria |
 |-------|----------|
 | A | 90%+ types have test classes |
@@ -57,14 +92,24 @@ metric: % of production types with corresponding test classes.
 | C | 50-74% |
 | D | 25-49% |
 | F | < 25% |
+| Not assessed | `applicable: false` — excluded from GPA |
 
-This is structural coverage (test class exists), not runtime line coverage. A
-test class existing does not guarantee thorough testing, but its absence
-guarantees none.
+This is structural coverage (test class exists), not runtime line coverage. It
+only works for suites written one test class per production type. Integration-
+and feature-driven suites test by behaviour, and name matching cannot see that —
+which is what `applicable: false` reports. To grade those, run a runtime coverage
+tool (`dotnet test --collect:"XPlat Code Coverage"`) or cite an existing coverage
+audit; do not substitute the structural number.
 
 ### Dimension 5: Dead Code
 
 Tool: MCP `find_dead_code(scope: "solution", kind: "all", maxResults: 50)`.
+
+Grade on `high`-confidence symbols. `conventionFiltered` reports symbols the tool
+excluded because a reference search cannot see how they are bound (EF entity
+configurations, hosted services, migrations, extension-method hosts) — these are
+**not** debt and are never penalised. `medium` symbols carry a `note` explaining
+which convention their name matches; verify before removing.
 
 | Grade | Criteria |
 |-------|----------|
@@ -73,9 +118,6 @@ Tool: MCP `find_dead_code(scope: "solution", kind: "all", maxResults: 50)`.
 | C | 9-15 |
 | D | 16-25 |
 | F | 25+ |
-
-Some false positives are expected (reflection, DI conventions). Verify before
-penalizing.
 
 ### Dimension 6: API Surface
 
@@ -124,7 +166,8 @@ Scan: XML docs on public APIs; README existence and currency.
 ## GPA Calculation
 
 Letter grades to points: A=4.0, B=3.0, C=2.0, D=1.0, F=0.0.
-GPA = average across all 8 dimensions.
+GPA = average across the dimensions **actually graded**. Dimensions marked
+"Not assessed" are excluded from both numerator and denominator.
 
 | GPA Range | Overall Assessment |
 |-----------|--------------------|
@@ -146,7 +189,7 @@ GPA = average across all 8 dimensions.
 | Dimension | Grade | Score | Key Finding |
 |-----------|-------|-------|-------------|
 | Build Health | A | 95 | 0 errors, 2 pre-existing warnings |
-| Code Quality | B | 82 | 3 anti-patterns in 4.2K lines |
+| Code Quality | B | 82 | 3 high-confidence findings in 4.2K lines; 31 medium untriaged |
 | Architecture | A | 92 | Clean dependency direction, 0 circular deps |
 | Test Coverage | C | 68 | 34/50 production types have test classes |
 | Dead Code | B | 85 | 5 unused methods identified |
@@ -155,6 +198,19 @@ GPA = average across all 8 dimensions.
 | Documentation | D | 55 | 12/30 public APIs have XML docs |
 
 ### Overall GPA: 3.0 (B-)
+
+### Detector Triage
+
+Mandatory whenever Dimension 2 or 5 is graded. Shows how the raw signal became a
+grade, so a reader can audit the judgement rather than trust it.
+
+| Id | Raw | Suppressed | Medium | High | Verdict |
+|----|-----|------------|--------|------|---------|
+| AP005 | 44 | 0 | 44 | 0 | All log-and-rethrow resilience wrappers — review, not debt |
+| AP010 | 9 | 0 | 8 | 1 | 1 genuine read-only query; 8 in command handlers |
+| AP004 | 2 | 0 | 0 | 2 | Real — `SystemSeeder` should take `TimeProvider` |
+
+Suppression config: `.cwm-navigator.json` (none / path). State it either way.
 
 ### Priority Recommendations
 

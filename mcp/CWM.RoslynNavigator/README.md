@@ -52,6 +52,80 @@ members. `get_symbol_source` caps by characters instead (`maxChars`, default 800
 `maxResults`. `get_diagnostics` orders errors first and always includes per-severity
 totals, so a capped response never hides the important picture.
 
+## Signal Quality
+
+Analysis tools are only useful if their output can be trusted without hand-triage.
+Three mechanisms keep the noise floor low.
+
+### Source classification
+
+Every syntax tree is classified as **production**, **test**, **generated**, or
+**migration**, using the path *relative to the solution root* plus project references
+and declaration attributes. Generated code is never reported by any detector. Each
+detector declares which kinds it applies to — a missing `CancellationToken` on an
+xUnit `[Fact]` is not a defect, so that detector runs on production only.
+
+`detect_antipatterns` takes `scope`: `production` (default) or `all`. The response
+summary always reports the file counts per kind, so nothing is silently skipped.
+
+### Confidence levels
+
+Findings carry `confidence`:
+
+- **`high`** — wrong regardless of context. Safe to grade and to act on directly.
+- **`medium`** — suspicious, but with legitimate uses the detector cannot rule out:
+  a `catch (Exception)` that logs and rethrows, an EF query inside a command handler
+  that may edit downstream. Review items, never grade inputs.
+
+Filter with `confidence: "high"` to get only graded findings. `find_dead_code` uses
+the same scale and reports `conventionFiltered` — symbols excluded because a
+reference search cannot see EF entity-configuration scanning, hosted-service
+registration, or extension-method dispatch.
+
+`get_test_coverage_map` returns `applicable: false` with a reason when its
+structural metric does not fit the codebase (integration- or feature-driven suites),
+rather than reporting a misleading percentage.
+
+### Suppression
+
+A codebase can declare that a detector is wrong for it. Suppressed findings are
+counted in `summary` and excluded from the violation list — visible, never hidden.
+
+**`.cwm-navigator.json`** at the solution root (discovery walks up to the repo root):
+
+```json
+{
+  "antipatterns": {
+    "disable": ["AP008"],
+    "suppress": [
+      {
+        "id": "AP005",
+        "paths": ["src/Outbox/**", "src/Comms/**"],
+        "reason": "bounded resilience wrappers — see CLAUDE.md §7"
+      },
+      { "id": "*", "paths": ["src/Legacy/**"], "reason": "frozen module" }
+    ]
+  }
+}
+```
+
+Paths are globs supporting `**`, `*`, and literal segments, matched against the
+solution-relative path. An `id` of `*` suppresses every detector under those paths.
+
+**Inline**, for one-off exceptions — on the finding's line or the line above:
+
+```csharp
+// cwm:ignore AP004 — documented wall-clock requirement for AWS SigV4
+var timestamp = DateTime.UtcNow;
+```
+
+**Attribute**, covering a whole declaration:
+
+```csharp
+[SuppressMessage("CWM", "AP005", Justification = "application boundary")]
+public async Task DrainAsync() { }
+```
+
 ## Installation
 
 ### As a Global Tool (Recommended)
@@ -193,6 +267,55 @@ dotnet run --project mcp/CWM.RoslynNavigator/src/CWM.RoslynNavigator.csproj -- -
 ```
 
 ## Changelog
+
+### 0.9.0
+
+Analysis accuracy pass. On a 34-project, 106K-line codebase, `detect_antipatterns`
+went from **3,512 findings (~95% false positives) to 55 — 3 high-confidence**, all
+verified genuine. `find_dead_code` went from 89 to 3. See [Signal Quality](#signal-quality).
+
+- **Source classification** — every syntax tree is classified production / test /
+  generated / migration from the solution-relative path, project references, and
+  declaration attributes. Generated code is never reported. Detectors declare which
+  kinds they apply to. `detect_antipatterns` gains `scope` (`production` default, `all`).
+- **Confidence levels** — findings carry `high` (wrong regardless of context) or
+  `medium` (needs judgement). New `confidence` filter. Only `high` should be graded.
+- **Suppression** — `.cwm-navigator.json` (path globs and detector disables),
+  inline `// cwm:ignore APXXX — reason`, and `[SuppressMessage("CWM", "APXXX")]`.
+  Suppressed findings are counted in the summary, never silently dropped.
+- **Complete summaries** — `detect_antipatterns` returns per-detector counts
+  (high/medium/suppressed) plus file counts by kind, accurate even when the
+  violation list is truncated. Callers no longer need to sample a dump to triage.
+- **Findings carry `member`** — the enclosing `Type.Method`, so a finding can be
+  judged without opening the file.
+- **Fixed AP010 (EF AsNoTracking)** — no longer fires on aggregates (`CountAsync`,
+  `AnyAsync`, `SumAsync` — these never populate the change tracker), on
+  `db.Database.SqlQuery` or `ChangeTracker.Entries` (not entity queries), or on
+  load-to-mutate reads (detected via `SaveChanges`, DbSet mutation resolved
+  semantically, raw-SQL row locks, or property assignment on the result). High
+  confidence is now reserved for read-shaped methods.
+- **Fixed AP006 (logging templates)** — only the message-template argument is
+  inspected, and templates the compiler folds to a constant (adjacent string
+  literals wrapping a long template, or a `const` prefix) are no longer flagged.
+- **Fixed AP005/AP007 (catch blocks)** — a block that logs or rethrows is `medium`,
+  not `high`; an empty block containing an explanatory comment is cleared, matching
+  the tool's own suggestion; empty `catch (OperationCanceledException)` is
+  recognised as the cooperative-shutdown idiom.
+- **Fixed AP009 (CancellationToken)** — production only, and skips test-attributed
+  methods, `HttpContext` parameters, middleware `Invoke`/`InvokeAsync`, `Main`, and
+  methods sourcing an ambient token. Reported at `medium` — whether a token belongs
+  on a signature depends on the caller.
+- **Fixed AP002 (sync-over-async)** — now semantic: `.Result` must resolve to
+  `Task<T>.Result`, so a domain `Result<T>` type is not flagged.
+- **Fixed AP008 (pragma restore)** — a restore only closes a *preceding* disable.
+- **`find_dead_code`** — filters convention-discovered symbols (EF
+  `IEntityTypeConfiguration`, hosted services, migrations, model snapshots,
+  extension-method hosts) and reports the count as `conventionFiltered`. Survivors
+  whose names match a convention suffix return `medium` with an explanatory `note`.
+- **`get_test_coverage_map`** — returns `applicable: false` with a reason and the
+  real test-method count when the structural metric does not fit the codebase,
+  instead of a misleading percentage. `/health-check` now records that dimension as
+  "Not assessed" and excludes it from the GPA.
 
 ### 0.8.0
 
