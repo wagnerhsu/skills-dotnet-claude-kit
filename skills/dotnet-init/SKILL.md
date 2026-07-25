@@ -82,7 +82,25 @@ Load the appropriate template from `templates/` as a base, then customize:
 - Configure the tech stack section
 - For existing projects: add project-specific conventions detected in Step 2
 - For greenfield: add recommended conventions based on architecture choice
-- Write to `./CLAUDE.md`
+
+**Before writing, check for an existing `CLAUDE.md`. Never overwrite it silently.**
+
+```
+→ If ./CLAUDE.md does NOT exist:
+  - Write the generated content to ./CLAUDE.md
+
+→ If ./CLAUDE.md ALREADY exists:
+  - Read it and identify hand-written / custom sections
+    (anything not produced by a kit template)
+  - Ask: "You already have a CLAUDE.md. How should I proceed?"
+    - Merge (recommended) → keep the user's custom sections, add or refresh the
+      kit's architecture, tech-stack, and convention sections in place
+    - Overwrite → replace it entirely with the freshly generated file
+    - Keep → leave the file untouched and print the generated content so the
+      user can copy what they want by hand
+  - For Merge and Overwrite: back the original up to ./CLAUDE.md.bak first.
+    Never discard user content without a .bak backup.
+```
 
 ### Step 5: Verify Setup
 
@@ -148,6 +166,26 @@ Claude: No .sln or .csproj found. Let's set up a new project.
   → Generated: ./CLAUDE.md (OrderService + VSA + scaffold-ready)
 
   Run /scaffold to add your first feature.
+```
+
+## Example — Existing Project With a CLAUDE.md
+
+```
+User: /dotnet-init
+
+Claude: Detected:
+  - Solution: MyApp.slnx (3 projects) → Web API
+  - Found an existing CLAUDE.md (custom "Deployment" and "Team conventions" sections)
+
+  You already have a CLAUDE.md. How should I proceed?
+  [Merge (recommended) / Overwrite / Keep]
+  > Merge
+
+  → Backed up original to ./CLAUDE.md.bak
+  → Kept your Deployment + Team conventions sections
+  → Refreshed architecture (VSA), tech-stack (PostgreSQL + JWT), and convention sections
+  Generated: ./CLAUDE.md
+  Run /health-check to see your baseline.
 ```
 
 ## Related
