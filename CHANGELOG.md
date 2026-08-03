@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **`hooks/pre-commit-antipattern.sh` rewritten** ([#23](https://github.com/codewithmukesh/dotnet-claude-kit/issues/23)) — the naive whole-file grep is replaced by a comment- and string-aware scanner (`hooks/lib/antipattern-scan.awk`) that mirrors the Roslyn detectors' rule IDs (AP001–AP004), severities, and `SourceKind` exemptions:
+  - Only the lines a commit **adds** are checked — a legacy `DateTime.Now` no longer blocks unrelated edits to the same file
+  - Comments, string, verbatim, and raw-string literals are stripped, tracking state across line boundaries
+  - Generated files are skipped; test and migration sources are exempted per rule, matching `SourceClassifier`
+  - `.Result` is reported only when the receiver is visibly task-like, so a domain `Result<T>` no longer trips the hook; `new HttpClient(handler)` is no longer reported
+  - New: `// cwm:ignore [AP00n]` line suppression and `CWM_ANTIPATTERN_WARN_ONLY=1` report-only mode
+  - Fixed a stale header comment that claimed the hook used `dotnet build` diagnostics
+
+### Added
+- **ADR-006** — Three-tier anti-pattern detection: why the pre-commit hook scans text, the Roslyn MCP is the authoritative pass, and analyzer packages are the team-wide gate; includes the process for adding a new rule
+- `hooks/README.md` now documents the tier model, hook options, and the grep-vs-analyzer rationale
+
 ## [0.11.0] — 2026-07-22
 
 Full-kit deep audit release: every skill, agent, rule, template, knowledge doc, hook, and the MCP server audited against current Claude Code docs and the mid-2026 .NET ecosystem, then fixed, modernized, and extended.

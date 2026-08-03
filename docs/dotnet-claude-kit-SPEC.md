@@ -202,6 +202,7 @@ dotnet-claude-kit/
 │       ├── 003-ef-core-default-orm.md     # Why EF Core, when to escape to raw SQL
 │       ├── 004-hybrid-cache-default.md    # Why HybridCache over manual patterns
 │       ├── 005-multi-architecture.md     # Multi-architecture support (supersedes 001)
+│       ├── 006-three-tier-antipattern-detection.md  # Why the pre-commit hook scans text
 │       └── template.md                    # ADR template for contributors
 │
 │

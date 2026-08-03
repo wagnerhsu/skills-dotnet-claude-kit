@@ -383,7 +383,7 @@ Three Claude Code hooks run automatically (declared in `hooks/hooks.json`); the 
 | `post-edit-format.sh` | Claude Code hook — PostToolUse (*.cs) | Auto-formats C# files after edits |
 | `post-scaffold-restore.sh` | Claude Code hook — PostToolUse (*.csproj) | `dotnet restore` after project file changes |
 | `pre-commit-format.sh` | Git pre-commit (manual install) | `dotnet format --verify-no-changes` ensures consistent formatting |
-| `pre-commit-antipattern.sh` | Git pre-commit (manual install) | Detects DateTime.Now, async void, new HttpClient() in staged files |
+| `pre-commit-antipattern.sh` | Git pre-commit (manual install) | Detects `async void`, sync-over-async, `new HttpClient()`, and `DateTime.Now` in the lines a commit adds ([why text, not an analyzer](knowledge/decisions/006-three-tier-antipattern-detection.md)) |
 | `post-test-analyze.sh` | Utility (pipe test output) | Parses test results and outputs actionable summary |
 | `pre-build-validate.sh` | Utility (run before builds) | Validates project structure (solution file, Directory.Build.props, test projects) |
 
