@@ -13,7 +13,7 @@ public static class GetTypeHierarchyTool
     [McpServerTool(Name = "get_type_hierarchy"), Description("Get the full inheritance chain, interfaces, and derived types for a type. For interfaces, derived types include both derived interfaces and implementing types.")]
     public static async Task<string> ExecuteAsync(
         WorkspaceManager workspace,
-        [Description("The type name to get the hierarchy for")] string typeName,
+        [Description("Type name. Bare ('OrderService') or namespace-qualified ('MyApp.Orders.OrderService').")] string typeName,
         [Description("Maximum derived types to return. TotalDerived in the response reports the full count; re-query with a higher value if it exceeds the list length.")] int maxResults = 50,
         CancellationToken ct = default)
     {
@@ -22,11 +22,17 @@ public static class GetTypeHierarchyTool
 
         var solution = workspace.GetSolution();
         if (solution is null)
-            return JsonSerializer.Serialize(new TypeHierarchyResult([], [], [], 0));
+            return JsonSerializer.Serialize(new TypeHierarchyResult([], [], [], 0, false, Math.Max(1, maxResults)));
 
-        var symbol = await SymbolResolver.ResolveSymbolAsync(workspace, typeName, ct: ct);
+        var resolved = await SymbolResolver.ResolveOrErrorAsync(workspace, typeName, ct: ct);
+        if (resolved.Failed) return resolved.Error;
+
+        var symbol = resolved.Symbol;
+
         if (symbol is not INamedTypeSymbol typeSymbol)
-            return JsonSerializer.Serialize(new TypeHierarchyResult([], [], [], 0));
+            return JsonSerializer.Serialize(new ErrorResponse(
+                ErrorCodes.WrongSymbolKind,
+                $"'{typeName}' resolved to a {SymbolResolver.GetKindString(symbol)}, not a type."));
 
         // Get base types chain
         var baseTypes = new List<string>();
@@ -59,8 +65,9 @@ public static class GetTypeHierarchyTool
             allDerived.AddRange(derived.Select(d => d.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)));
         }
 
-        var derivedTypes = allDerived.Take(Math.Max(1, maxResults)).ToList();
+        var page = Paging.Apply(allDerived, maxResults);
 
-        return JsonSerializer.Serialize(new TypeHierarchyResult(baseTypes, interfaces, derivedTypes, allDerived.Count));
+        return JsonSerializer.Serialize(new TypeHierarchyResult(
+            baseTypes, interfaces, page.Items, page.TotalFound, page.Truncated, page.Limit));
     }
 }

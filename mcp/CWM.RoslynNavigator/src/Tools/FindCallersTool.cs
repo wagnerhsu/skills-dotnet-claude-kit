@@ -10,10 +10,10 @@ namespace CWM.RoslynNavigator.Tools;
 [McpServerToolType]
 public static class FindCallersTool
 {
-    [McpServerTool(Name = "find_callers"), Description("Find all methods that call a specific method. Useful for impact analysis and understanding dependencies.")]
+    [McpServerTool(Name = "find_callers"), Description("Find all methods that call a specific method. Useful for impact analysis and understanding dependencies. Each caller carries IsGenerated so generated call sites can be skipped.")]
     public static async Task<string> ExecuteAsync(
         WorkspaceManager workspace,
-        [Description("The method name to find callers for")] string methodName,
+        [Description("Method to find callers for. Bare, type-qualified ('OrderService.CreateAsync'), or fully qualified. Qualify when the name is reused across types.")] string methodName,
         [Description("Optional: containing class name to disambiguate")] string? className = null,
         [Description("Maximum results to return. TotalFound in the response reports the full count; re-query with a higher value if it exceeds Count.")] int maxResults = 50,
         CancellationToken ct = default)
@@ -23,23 +23,23 @@ public static class FindCallersTool
 
         var solution = workspace.GetSolution();
         if (solution is null)
-            return JsonSerializer.Serialize(new CallersResult([], 0, 0));
+            return Serialize(Paging.Empty<CallerInfo>(maxResults));
 
-        var symbol = await SymbolResolver.ResolveSymbolAsync(workspace, methodName, ct: ct);
+        // A className hint is just a qualifier — fold it in rather than resolving twice.
+        var lookupName = className is not null && !methodName.Contains('.')
+            ? $"{className}.{methodName}"
+            : methodName;
 
-        // If className is provided and the resolved symbol isn't in that type, try to find a better match
-        if (symbol is not null && className is not null && symbol.ContainingType?.Name != className)
-        {
-            var allSymbols = await SymbolResolver.FindSymbolsByNameAsync(workspace, methodName, ct: ct);
-            symbol = allSymbols.FirstOrDefault(s => s.ContainingType?.Name == className) ?? symbol;
-        }
+        var resolved = await SymbolResolver.ResolveOrErrorAsync(workspace, lookupName, ct: ct);
+        if (resolved.Failed) return resolved.Error;
 
-        if (symbol is null)
-            return JsonSerializer.Serialize(new CallersResult([], 0, 0));
+        var symbol = resolved.Symbol;
 
         var callers = await SymbolFinder.FindCallersAsync(symbol, solution, ct);
 
+        var generated = new GeneratedCodeIndex(workspace);
         var all = new List<CallerInfo>();
+
         foreach (var caller in callers)
         {
             if (!caller.IsDirect) continue;
@@ -51,12 +51,15 @@ public static class FindCallersTool
                     Method: caller.CallingSymbol.Name,
                     ContainingType: caller.CallingSymbol.ContainingType?.Name ?? "unknown",
                     File: workspace.ToRelativePath(location.Value.File),
-                    Line: location.Value.Line));
+                    Line: location.Value.Line,
+                    IsGenerated: generated.IsGenerated(caller.CallingSymbol, ct)));
             }
         }
 
-        var results = all.Take(Math.Max(1, maxResults)).ToList();
-
-        return JsonSerializer.Serialize(new CallersResult(results, results.Count, all.Count));
+        return Serialize(Paging.Apply(all, maxResults));
     }
+
+    private static string Serialize(Paging.Page<CallerInfo> page) =>
+        JsonSerializer.Serialize(new CallersResult(
+            page.Items, page.Count, page.TotalFound, page.Truncated, page.Limit));
 }

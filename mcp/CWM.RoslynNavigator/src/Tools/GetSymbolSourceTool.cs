@@ -28,37 +28,27 @@ public static class GetSymbolSourceTool
         var notReady = await workspace.EnsureReadyOrStatusAsync(ct);
         if (notReady is not null) return notReady;
 
-        // Dotted name: last segment is the member, the one before it the containing type
-        var name = symbolName;
-        var dotIndex = symbolName.LastIndexOf('.');
-        if (dotIndex > 0 && dotIndex < symbolName.Length - 1)
-        {
-            name = symbolName[(dotIndex + 1)..];
-            containingType ??= symbolName[..dotIndex].Split('.')[^1];
-        }
+        // Qualified names resolve natively in SymbolResolver. An explicit containingType
+        // argument is folded into the same qualified form, and only falls back to the bare
+        // name when that yields nothing (e.g. symbolName is itself the type).
+        var lookupName = containingType is not null && !symbolName.Contains('.')
+            ? $"{containingType}.{symbolName}"
+            : symbolName;
 
-        var symbol = await SymbolResolver.ResolveSymbolAsync(workspace, name, file, line, ct);
+        var resolved = await SymbolResolver.ResolveOrErrorAsync(workspace, lookupName, file, line, ct: ct);
+        if (resolved.Failed) return resolved.Error;
 
-        if (symbol is not null && containingType is not null && symbol.ContainingType?.Name != containingType)
-        {
-            var allSymbols = await SymbolResolver.FindSymbolsByNameAsync(workspace, name, ct: ct);
-            symbol = allSymbols.FirstOrDefault(s =>
-                    s.ContainingType?.Name == containingType || s.Name == containingType)
-                ?? symbol;
-        }
-
-        if (symbol is null)
-            return JsonSerializer.Serialize(new StatusResponse("NotFound", $"Symbol '{symbolName}' not found."));
+        var symbol = resolved.Symbol;
 
         var syntaxRef = symbol.DeclaringSyntaxReferences.FirstOrDefault();
         if (syntaxRef is null)
-            return JsonSerializer.Serialize(new StatusResponse("NotFound",
-                $"Symbol '{symbolName}' has no source in this solution (metadata symbol)."));
+            return JsonSerializer.Serialize(new ErrorResponse(ErrorCodes.NoSource,
+                $"'{symbolName}' has no source in this solution (metadata symbol)."));
 
         var node = (await syntaxRef.GetSyntaxAsync(ct)).FirstAncestorOrSelf<MemberDeclarationSyntax>();
         if (node is null)
-            return JsonSerializer.Serialize(new StatusResponse("NotFound",
-                $"Symbol '{symbolName}' does not map to a member declaration."));
+            return JsonSerializer.Serialize(new ErrorResponse(ErrorCodes.NoSource,
+                $"'{symbolName}' does not map to a member declaration."));
 
         maxChars = Math.Clamp(maxChars, MinChars, MaxChars);
 

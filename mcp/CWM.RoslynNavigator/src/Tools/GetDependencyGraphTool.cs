@@ -14,7 +14,7 @@ public static class GetDependencyGraphTool
     [McpServerTool(Name = "get_dependency_graph"), Description("Get the call dependency graph for a method, showing all methods it calls recursively up to a specified depth. Useful for impact analysis and understanding code flow.")]
     public static async Task<string> ExecuteAsync(
         WorkspaceManager workspace,
-        [Description("The method name to analyze")] string symbolName,
+        [Description("Method to analyze. Bare, type-qualified ('OrderService.CreateAsync'), or fully qualified.")] string symbolName,
         [Description("Optional: file path to disambiguate")] string? file = null,
         [Description("Optional: line number to disambiguate")] int? line = null,
         [Description("Maximum recursion depth (1-5)")] int depth = 3,
@@ -28,9 +28,15 @@ public static class GetDependencyGraphTool
         if (solution is null)
             return JsonSerializer.Serialize(new DependencyGraphResult("unknown", [], 0, false));
 
-        var symbol = await SymbolResolver.ResolveSymbolAsync(workspace, symbolName, file, line, ct);
+        var resolved = await SymbolResolver.ResolveOrErrorAsync(workspace, symbolName, file, line, ct: ct);
+        if (resolved.Failed) return resolved.Error;
+
+        var symbol = resolved.Symbol;
+
         if (symbol is not IMethodSymbol rootMethod)
-            return JsonSerializer.Serialize(new DependencyGraphResult(symbolName, [], 0, false));
+            return JsonSerializer.Serialize(new ErrorResponse(
+                ErrorCodes.WrongSymbolKind,
+                $"'{symbolName}' resolved to a {SymbolResolver.GetKindString(symbol)}, not a method."));
 
         depth = Math.Clamp(depth, 1, 5);
 

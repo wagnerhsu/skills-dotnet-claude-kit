@@ -10,7 +10,7 @@ namespace CWM.RoslynNavigator.Tools;
 [McpServerToolType]
 public static class FindImplementationsTool
 {
-    [McpServerTool(Name = "find_implementations"), Description("Find all types that implement an interface or derive from a base class.")]
+    [McpServerTool(Name = "find_implementations"), Description("Find all types that implement an interface or derive from a base class. Each result carries IsGenerated so generated implementations can be skipped.")]
     public static async Task<string> ExecuteAsync(
         WorkspaceManager workspace,
         [Description("The interface or base class name to find implementations for")] string interfaceName,
@@ -22,17 +22,25 @@ public static class FindImplementationsTool
 
         var solution = workspace.GetSolution();
         if (solution is null)
-            return JsonSerializer.Serialize(new ImplementationsResult([], 0, 0));
+            return Serialize(Paging.Empty<ImplementationInfo>(maxResults));
 
-        var symbol = await SymbolResolver.ResolveSymbolAsync(workspace, interfaceName, ct: ct);
+        var resolved = await SymbolResolver.ResolveOrErrorAsync(workspace, interfaceName, ct: ct);
+        if (resolved.Failed) return resolved.Error;
+
+        var symbol = resolved.Symbol;
+
         if (symbol is not INamedTypeSymbol typeSymbol)
-            return JsonSerializer.Serialize(new ImplementationsResult([], 0, 0));
+            return JsonSerializer.Serialize(new ErrorResponse(
+                ErrorCodes.WrongSymbolKind,
+                $"'{interfaceName}' resolved to a {SymbolResolver.GetKindString(symbol)}, not an interface or class."));
 
         var implementations = typeSymbol.TypeKind == TypeKind.Interface
             ? await SymbolFinder.FindImplementationsAsync(typeSymbol, solution, cancellationToken: ct)
             : await SymbolFinder.FindDerivedClassesAsync(typeSymbol, solution, cancellationToken: ct);
 
+        var generated = new GeneratedCodeIndex(workspace);
         var all = new List<ImplementationInfo>();
+
         foreach (var impl in implementations)
         {
             var location = SymbolResolver.GetLocation(impl);
@@ -41,12 +49,15 @@ public static class FindImplementationsTool
                 all.Add(new ImplementationInfo(
                     impl.Name,
                     workspace.ToRelativePath(location.Value.File),
-                    location.Value.Line));
+                    location.Value.Line,
+                    generated.IsGenerated(impl, ct)));
             }
         }
 
-        var results = all.Take(Math.Max(1, maxResults)).ToList();
-
-        return JsonSerializer.Serialize(new ImplementationsResult(results, results.Count, all.Count));
+        return Serialize(Paging.Apply(all, maxResults));
     }
+
+    private static string Serialize(Paging.Page<ImplementationInfo> page) =>
+        JsonSerializer.Serialize(new ImplementationsResult(
+            page.Items, page.Count, page.TotalFound, page.Truncated, page.Limit));
 }

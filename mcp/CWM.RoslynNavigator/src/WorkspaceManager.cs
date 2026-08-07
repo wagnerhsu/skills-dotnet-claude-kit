@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
 using System.Text.Json;
 using CWM.RoslynNavigator.Responses;
 using Microsoft.CodeAnalysis;
@@ -24,9 +25,14 @@ public sealed class WorkspaceManager(ILogger<WorkspaceManager> logger, TimeProvi
     private readonly ConcurrentDictionary<ProjectId, Compilation> _compilationCache = new();
     private readonly ConcurrentDictionary<ProjectId, long> _cacheAccessOrder = new();
     private readonly ConcurrentDictionary<DocumentId, DocumentInfo> _knownDocuments = new();
-    private readonly ConcurrentDictionary<string, DateTime> _projectFileTimestamps = new();
+    private readonly ConcurrentDictionary<string, BuildFileInfo> _buildFiles = new();
     private readonly ConcurrentDictionary<string, byte> _knownDocumentPaths = new(StringComparer.OrdinalIgnoreCase);
     private long _accessCounter;
+    private int _loadCount;
+    private readonly CancellationTokenSource _backgroundCts = new();
+    private int _structuralScanRunning;
+    private int _newSourceFilesPending;
+    private Task _structuralScan = Task.CompletedTask;
     private int _rootsAttempted; // 0 = not tried, 1 = tried
     private long _lastRefreshTicks;
     private long _lastStructuralScanTicks;
@@ -51,6 +57,17 @@ public sealed class WorkspaceManager(ILogger<WorkspaceManager> logger, TimeProvi
     internal IServiceProvider? Services { get; set; }
 
     /// <summary>
+    /// Number of compilations currently cached. Test seam for verifying reload eviction.
+    /// </summary>
+    internal int CachedCompilationCount => _compilationCache.Count;
+
+    /// <summary>
+    /// How many times the solution has been loaded. Test seam for verifying that a
+    /// no-op build-file rewrite does not trigger a reload.
+    /// </summary>
+    internal int LoadCount => _loadCount;
+
+    /// <summary>
     /// Loads the solution at the specified path. Call this once on startup.
     /// </summary>
     public async Task LoadSolutionAsync(string solutionPath, CancellationToken ct = default)
@@ -61,6 +78,12 @@ public sealed class WorkspaceManager(ILogger<WorkspaceManager> logger, TimeProvi
             State = WorkspaceState.Loading;
             _solutionPath = solutionPath;
             _errorMessage = null;
+
+            // A reload mints fresh ProjectIds, so every cached Compilation is keyed on a
+            // dead id. Clearing here (rather than at each call site) keeps the roots-discovery
+            // and error-retry paths from resurrecting stale entries.
+            _compilationCache.Clear();
+            _cacheAccessOrder.Clear();
 
             logger.LogInformation("Loading solution: {SolutionPath}", solutionPath);
 
@@ -77,6 +100,7 @@ public sealed class WorkspaceManager(ILogger<WorkspaceManager> logger, TimeProvi
             });
 
             _solution = await _workspace.OpenSolutionAsync(solutionPath, cancellationToken: ct);
+            Interlocked.Increment(ref _loadCount);
 
             logger.LogInformation("Solution loaded: {ProjectCount} projects", _solution.ProjectIds.Count);
 
@@ -334,17 +358,22 @@ public sealed class WorkspaceManager(ILogger<WorkspaceManager> logger, TimeProvi
     }
 
     /// <summary>
-    /// Records the last-write time of every document and project file in the solution.
+    /// Records the last-write time of every document and build file in the solution.
     /// Called once after solution load to establish a baseline for staleness detection.
     /// Stores file paths and project IDs alongside timestamps to avoid Roslyn lookups
     /// during the per-call refresh hot path.
+    ///
+    /// Build files (.csproj plus the Directory.* files that feed into them) additionally
+    /// get a content hash. A reload is the most expensive thing this server does, and a
+    /// timestamp alone cannot tell a real edit from a rewrite with identical content —
+    /// which is what a branch switch or a formatter produces across many files at once.
     /// </summary>
     private void SnapshotFileTimestamps()
     {
         if (_solution is null) return;
 
         _knownDocuments.Clear();
-        _projectFileTimestamps.Clear();
+        _buildFiles.Clear();
         _knownDocumentPaths.Clear();
 
         foreach (var projectId in _solution.ProjectIds)
@@ -353,9 +382,7 @@ public sealed class WorkspaceManager(ILogger<WorkspaceManager> logger, TimeProvi
             if (project is null) continue;
 
             if (project.FilePath is not null)
-            {
-                _projectFileTimestamps[project.FilePath] = File.GetLastWriteTimeUtc(project.FilePath);
-            }
+                TrackBuildFile(project.FilePath);
 
             foreach (var document in project.Documents)
             {
@@ -370,11 +397,73 @@ public sealed class WorkspaceManager(ILogger<WorkspaceManager> logger, TimeProvi
             }
         }
 
-        logger.LogInformation("Captured timestamps for {Count} documents across {ProjectCount} projects",
-            _knownDocuments.Count, _projectFileTimestamps.Count);
+        foreach (var sharedFile in EnumerateSharedBuildFiles())
+            TrackBuildFile(sharedFile);
+
+        logger.LogInformation("Captured timestamps for {Count} documents across {BuildFileCount} build files",
+            _knownDocuments.Count, _buildFiles.Count);
+    }
+
+    /// <summary>
+    /// Directory-scoped MSBuild files change the compilation of every project beneath
+    /// them — a bumped version in Directory.Packages.props is as significant as a csproj
+    /// edit — but they are not documents, so nothing else in the workspace notices them.
+    /// </summary>
+    private IEnumerable<string> EnumerateSharedBuildFiles()
+    {
+        var root = SolutionDirectory;
+        if (root is null || !Directory.Exists(root)) yield break;
+
+        string[] names =
+        [
+            "Directory.Build.props",
+            "Directory.Build.targets",
+            "Directory.Packages.props",
+            "global.json",
+            "nuget.config"
+        ];
+
+        foreach (var name in names)
+        {
+            var path = Path.Combine(root, name);
+            if (File.Exists(path)) yield return path;
+        }
+    }
+
+    private void TrackBuildFile(string path)
+    {
+        var writeTime = File.GetLastWriteTimeUtc(path);
+        if (writeTime.Year < 1900) return;
+
+        _buildFiles[path] = new BuildFileInfo(writeTime, ComputeHash(path));
+    }
+
+    /// <summary>
+    /// Content hash of a build file, or null when it cannot be read. A null hash compares
+    /// unequal to every other value, so an unreadable file is treated as changed rather
+    /// than silently assumed stable.
+    /// </summary>
+    private static string? ComputeHash(string path)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            return Convert.ToHexString(SHA256.HashData(stream));
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     private readonly record struct DocumentInfo(string FilePath, ProjectId ProjectId, DateTime LastWriteUtc);
+
+    /// <summary>A csproj or Directory.* file, tracked by both timestamp and content.</summary>
+    private readonly record struct BuildFileInfo(DateTime LastWriteUtc, string? Hash);
 
     /// <summary>
     /// Refreshes the workspace to reflect on-disk changes. Uses tiered cooldowns to
@@ -391,29 +480,35 @@ public sealed class WorkspaceManager(ILogger<WorkspaceManager> logger, TimeProvi
         if (now - lastRefresh < RefreshCooldownTicks) return;
         Interlocked.Exchange(ref _lastRefreshTicks, now);
 
-        // Phase 1: check .csproj timestamps (one stat per project)
-        if (HasProjectFileChanged())
+        // Phase 1: check build files (one stat each, hashed only when the stat moved)
+        var changedBuildFiles = GetChangedBuildFiles();
+        if (changedBuildFiles.Count > 0)
         {
-            logger.LogInformation("Project file changed. Full reload needed.");
-            _compilationCache.Clear();
-            _cacheAccessOrder.Clear();
+            logger.LogInformation(
+                "Build files changed ({Files}). Reloading solution.",
+                string.Join(", ", changedBuildFiles.Select(Path.GetFileName)));
+
             await LoadSolutionAsync(_solutionPath, ct);
             return;
         }
 
-        // Phase 2: scan for new source files (expensive directory walk, longer cooldown)
+        // Phase 2: act on whatever the last background scan found. The scan itself walks
+        // every project directory, so it never runs in-band — a tool call pays an
+        // interlocked read here, and the reload only once the scan has already found
+        // something. The finding is at most one cooldown stale, which is the same
+        // staleness the in-band version had.
+        if (Interlocked.Exchange(ref _newSourceFilesPending, 0) == 1)
+        {
+            logger.LogInformation("New source files detected. Reloading solution.");
+            await LoadSolutionAsync(_solutionPath, ct);
+            return;
+        }
+
         var lastStructural = Interlocked.Read(ref _lastStructuralScanTicks);
         if (now - lastStructural >= StructuralScanCooldownTicks)
         {
             Interlocked.Exchange(ref _lastStructuralScanTicks, now);
-            if (HasNewSourceFiles())
-            {
-                logger.LogInformation("New source files detected. Full reload needed.");
-                _compilationCache.Clear();
-                _cacheAccessOrder.Clear();
-                await LoadSolutionAsync(_solutionPath, ct);
-                return;
-            }
+            StartStructuralScan();
         }
 
         // Phase 3: collect changed documents without holding the lock (stat calls are
@@ -451,20 +546,81 @@ public sealed class WorkspaceManager(ILogger<WorkspaceManager> logger, TimeProvi
         }
     }
 
-    private bool HasProjectFileChanged()
+    /// <summary>
+    /// Build files whose content actually differs from the last load. The timestamp is a
+    /// cheap pre-filter — one stat per file — and only files that moved are hashed, so the
+    /// steady-state cost is unchanged while a no-op rewrite costs one hash instead of a
+    /// full solution reload.
+    /// </summary>
+    private List<string> GetChangedBuildFiles()
     {
-        foreach (var (path, lastKnown) in _projectFileTimestamps)
+        var changed = new List<string>();
+
+        foreach (var (path, known) in _buildFiles)
         {
             // GetLastWriteTimeUtc returns year 1601 for missing files — always < lastKnown
-            if (File.GetLastWriteTimeUtc(path) > lastKnown)
-                return true;
+            if (File.GetLastWriteTimeUtc(path) <= known.LastWriteUtc)
+                continue;
+
+            var hash = ComputeHash(path);
+            if (hash is not null && hash == known.Hash)
+            {
+                // Rewritten with identical content: refresh the timestamp so the next poll
+                // short-circuits at the stat, and skip the reload.
+                _buildFiles[path] = known with { LastWriteUtc = File.GetLastWriteTimeUtc(path) };
+                continue;
+            }
+
+            changed.Add(path);
         }
-        return false;
+
+        return changed;
     }
 
-    private bool HasNewSourceFiles()
+    /// <summary>
+    /// Kicks off the directory walk on a background thread, at most one at a time. Fire and
+    /// forget by design: the caller is servicing a tool request and must not wait on it.
+    /// </summary>
+    private void StartStructuralScan()
     {
-        if (_solution is null) return false;
+        if (Interlocked.CompareExchange(ref _structuralScanRunning, 1, 0) != 0)
+            return;
+
+        _structuralScan = Task.Run(() =>
+        {
+            try
+            {
+                if (HasNewSourceFiles(_backgroundCts.Token))
+                    Interlocked.Exchange(ref _newSourceFilesPending, 1);
+            }
+            catch (OperationCanceledException)
+            {
+                // Shutting down.
+            }
+            catch (Exception ex)
+            {
+                // A transient IO error during the walk costs one missed scan, not a failed
+                // tool call — the next cooldown schedules another.
+                logger.LogWarning(ex, "Structural scan failed; will retry on the next cooldown.");
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _structuralScanRunning, 0);
+            }
+        }, _backgroundCts.Token);
+    }
+
+    /// <summary>
+    /// Awaits the in-flight structural scan. Test seam — nothing in the request path
+    /// should ever wait on this.
+    /// </summary>
+    internal Task WaitForStructuralScanAsync() => _structuralScan;
+
+    private bool HasNewSourceFiles(CancellationToken ct)
+    {
+        // Captured once: a concurrent reload can swap the field mid-walk.
+        var solution = _solution;
+        if (solution is null) return false;
 
         var options = new EnumerationOptions
         {
@@ -473,9 +629,11 @@ public sealed class WorkspaceManager(ILogger<WorkspaceManager> logger, TimeProvi
             AttributesToSkip = FileAttributes.Hidden | FileAttributes.System
         };
 
-        foreach (var projectId in _solution.ProjectIds)
+        foreach (var projectId in solution.ProjectIds)
         {
-            var project = _solution.GetProject(projectId);
+            ct.ThrowIfCancellationRequested();
+
+            var project = solution.GetProject(projectId);
             if (project?.FilePath is null) continue;
 
             var projectDir = Path.GetDirectoryName(project.FilePath);
@@ -488,6 +646,8 @@ public sealed class WorkspaceManager(ILogger<WorkspaceManager> logger, TimeProvi
 
             foreach (var file in Directory.EnumerateFiles(projectDir, "*.cs", options))
             {
+                ct.ThrowIfCancellationRequested();
+
                 if (file.StartsWith(binPrefix, StringComparison.OrdinalIgnoreCase) ||
                     file.StartsWith(objPrefix, StringComparison.OrdinalIgnoreCase))
                     continue;
@@ -502,6 +662,19 @@ public sealed class WorkspaceManager(ILogger<WorkspaceManager> logger, TimeProvi
 
     public void Dispose()
     {
+        _backgroundCts.Cancel();
+
+        try
+        {
+            // Bounded so shutdown cannot block on a large directory walk.
+            _structuralScan.Wait(TimeSpan.FromSeconds(2));
+        }
+        catch (Exception)
+        {
+            // Cancellation or a failed scan; nothing left to salvage during teardown.
+        }
+
+        _backgroundCts.Dispose();
         _workspace?.Dispose();
         _writeLock.Dispose();
     }

@@ -24,18 +24,21 @@ public static class GetFileOutlineTool
 
         var solution = workspace.GetSolution();
         if (solution is null)
-            return JsonSerializer.Serialize(new FileOutlineResult("unknown", null, 0, [], 0, 0));
+            return JsonSerializer.Serialize(new FileOutlineResult(
+                "unknown", null, 0, [], 0, 0, false, Math.Max(1, maxResults)));
 
         var document = solution.Projects
             .SelectMany(p => p.Documents)
             .FirstOrDefault(d => d.FilePath?.EndsWith(filePath, StringComparison.OrdinalIgnoreCase) == true);
 
         if (document?.FilePath is null)
-            return JsonSerializer.Serialize(new StatusResponse("NotFound", $"File '{filePath}' not found in the solution."));
+            return JsonSerializer.Serialize(new ErrorResponse(ErrorCodes.FileNotFound,
+                $"File '{filePath}' is not part of any project in the solution."));
 
         var root = await document.GetSyntaxRootAsync(ct);
         if (root is null)
-            return JsonSerializer.Serialize(new StatusResponse("NotFound", $"File '{filePath}' has no syntax tree."));
+            return JsonSerializer.Serialize(new ErrorResponse(ErrorCodes.NoSource,
+                $"File '{filePath}' has no syntax tree."));
 
         var usingCount = root.DescendantNodes(n => n is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax)
             .OfType<UsingDirectiveSyntax>()
@@ -60,7 +63,9 @@ public static class GetFileOutlineTool
             UsingCount: usingCount,
             Types: types,
             Count: budget.Returned,
-            TotalFound: budget.Total));
+            TotalFound: budget.Total,
+            Truncated: budget.Total > budget.Returned,
+            Limit: Math.Max(1, maxResults)));
     }
 
     private sealed class OutlineBudget(int maxMembers)
